@@ -1,6 +1,6 @@
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using TaskbarExtras.Actions;
 using TaskbarExtras.Shell;
@@ -113,5 +113,43 @@ public partial class ClassicMenuWindow : Window
     private void OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (e.Key == Key.Escape) Hide();
+    }
+
+    /// <summary>Physical-pixel rect of the menu while it is on screen, otherwise null.</summary>
+    public ScreenRect? GetScreenRectOrNull()
+    {
+        if (!IsVisible) return null;
+        var handle = new WindowInteropHelper(this).Handle;
+        return WindowEnumerator.TryGetRect(handle, out var rect) ? rect : null;
+    }
+
+    /// <summary>
+    /// Pay the one-off costs of showing a window — JIT, XAML template expansion, layout, font
+    /// loading — while nobody is watching, so the first real popup is instant.
+    ///
+    /// <para>
+    /// Measured effect: without this, the very first right-click on the taskbar visibly lags
+    /// behind the click. It is a one-time cost, but it lands on exactly the moment the user is
+    /// judging whether the tool feels responsive, so it is worth pre-paying at startup.
+    /// </para>
+    /// </summary>
+    public void WarmUp()
+    {
+        try
+        {
+            Rebuild();
+            Opacity = 0;
+            Left = -32000;   // far off-screen; Opacity 0 keeps it invisible anyway
+            Top = -32000;
+            Show();
+            UpdateLayout();
+            Hide();
+        }
+        finally
+        {
+            Opacity = 1;
+            Left = 0;
+            Top = 0;
+        }
     }
 }

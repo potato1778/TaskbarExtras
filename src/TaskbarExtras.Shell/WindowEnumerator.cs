@@ -48,6 +48,16 @@ public static class WindowEnumerator
         return cloaked != 0;
     }
 
+    /// <summary>Physical-pixel rect of any window. Kept here so callers never P/Invoke directly.</summary>
+    public static bool TryGetRect(IntPtr hWnd, out ScreenRect rect)
+    {
+        rect = default;
+        if (hWnd == IntPtr.Zero) return false;
+        if (!NativeMethods.GetWindowRect(hWnd, out var r)) return false;
+        rect = new ScreenRect(r.Left, r.Top, r.Right, r.Bottom);
+        return true;
+    }
+
     public static string GetTitle(IntPtr hWnd)
     {
         var sb = new StringBuilder(512);

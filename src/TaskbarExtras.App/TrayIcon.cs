@@ -1,5 +1,9 @@
 using System.Drawing;
 using System.Windows.Forms;
+using TaskbarExtras.Actions;
+
+// WPF's implicit usings put System.Windows.Localization in scope, so the name needs pinning.
+using Localization = TaskbarExtras.Actions.Localization;
 
 namespace TaskbarExtras.App;
 
@@ -27,15 +31,15 @@ public sealed class TrayIcon : IDisposable
     public TrayIcon()
     {
         var menu = new ContextMenuStrip();
-        menu.Items.Add("打开菜单(&M)", null, (_, _) => OpenMenuRequested?.Invoke(this, EventArgs.Empty));
+        menu.Items.Add(Localization.Get("tray.open-menu"), null, (_, _) => OpenMenuRequested?.Invoke(this, EventArgs.Empty));
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("打开日志(&L)", null, (_, _) => OpenLog());
-        menu.Items.Add("退出(&X)", null, (_, _) => ExitRequested?.Invoke(this, EventArgs.Empty));
+        menu.Items.Add(Localization.Get("tray.open-log"), null, (_, _) => OpenLog());
+        menu.Items.Add(Localization.Get("tray.exit"), null, (_, _) => ExitRequested?.Invoke(this, EventArgs.Empty));
 
         _icon = new NotifyIcon
         {
             Icon = SystemIcons.Application,
-            Text = "TaskbarExtras — 任务栏右键菜单增强",
+            Text = Localization.Get("tray.tooltip"),
             Visible = true,
             ContextMenuStrip = menu
         };

@@ -65,6 +65,62 @@ public static class TaskbarInfo
         return true;
     }
 
+    /// <summary>
+    /// Child windows of the taskbar that own their own right-click behaviour. A right-click
+    /// inside any of these must be left alone, or we break things the user relies on:
+    /// jump lists on task buttons, the Win+X menu on the Start button, per-icon tray menus.
+    /// </summary>
+    private static readonly string[] InteractiveChildClasses =
+    {
+        "Start",                    // right-click = Win+X power user menu
+        "MSTaskSwWClass",           // the task list  -> jump lists
+        "MSTaskListWClass",
+        "ReBarWindow32",            // toolbar host that contains the task list
+        "TrayNotifyWnd",            // clock + notification area -> their own menus
+        "TrayShowDesktopButtonWnd",
+    };
+
+    /// <summary>
+    /// True when a point is over the taskbar's <b>empty</b> background — the only place where
+    /// right-clicking should bring up our replacement menu.
+    /// </summary>
+    /// <remarks>
+    /// This check is what makes the hook approach safe. Swallowing every right-click over the
+    /// taskbar would kill jump lists and the Win+X menu, which would be a far worse regression
+    /// than the problem being solved.
+    /// </remarks>
+    public static bool IsOverEmptyTaskbarArea(int x, int y)
+    {
+        if (!TryGetRect(out var taskbar) || !taskbar.Contains(x, y)) return false;
+
+        var taskbarHandle = Handle;
+        if (taskbarHandle == IntPtr.Zero) return true;
+
+        var blocked = false;
+        NativeMethods.EnumChildWindows(taskbarHandle, (child, _) =>
+        {
+            var className = WindowEnumerator.GetClassName(child);
+            if (Array.IndexOf(InteractiveChildClasses, className) < 0) return true;
+            if (WindowEnumerator.TryGetRect(child, out var rect) && rect.Contains(x, y))
+            {
+                blocked = true;
+                return false;
+            }
+            return true;
+        }, IntPtr.Zero);
+
+        return !blocked;
+    }
+
+    /// <summary>
+    /// True when a specific point is over the taskbar. Preferred over
+    /// <see cref="IsCursorOverTaskbar"/> when the coordinates come from a mouse hook, because
+    /// those are the coordinates of the click being processed, not "wherever the cursor is by
+    /// the time we get round to asking".
+    /// </summary>
+    public static bool IsPointOverTaskbar(int x, int y, int tolerance = 2) =>
+        TryGetRect(out var rect) && rect.Contains(x, y, tolerance);
+
     /// <summary>The work area of the monitor the taskbar lives on (excludes taskbar and all other appbars).</summary>
     public static bool TryGetWorkArea(out ScreenRect work)
     {

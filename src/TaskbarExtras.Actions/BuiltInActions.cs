@@ -20,7 +20,7 @@ namespace TaskbarExtras.Actions;
 public sealed class ShowDesktopAction : IAction
 {
     public string Id => "show-desktop";
-    public string DisplayName => "显示桌面";
+    public string DisplayName => Localization.Get("action.show-desktop");
     public string IconKey => "show-desktop";
 
     public bool CanExecute() => true;
@@ -35,7 +35,7 @@ public sealed class ShowDesktopAction : IAction
 public sealed class TaskManagerAction : IAction
 {
     public string Id => "task-manager";
-    public string DisplayName => "任务管理器";
+    public string DisplayName => Localization.Get("action.task-manager");
     public string IconKey => "task-manager";
 
     public bool CanExecute() => true;
@@ -44,7 +44,8 @@ public sealed class TaskManagerAction : IAction
     {
         try
         {
-            // Process.Start uses ShellExecute, which elevates if the user's policy requires it.
+            // UseShellExecute lets the shell decide about elevation, and it resolves taskmgr.exe
+            // from the system directory rather than the current one.
             Process.Start(new ProcessStartInfo("taskmgr.exe") { UseShellExecute = true });
             return true;
         }
@@ -58,7 +59,7 @@ public sealed class TaskManagerAction : IAction
 public sealed class CascadeWindowsAction : IAction
 {
     public string Id => "cascade-windows";
-    public string DisplayName => "层叠窗口";
+    public string DisplayName => Localization.Get("action.cascade-windows");
     public string IconKey => "cascade";
     public bool CanExecute() => WindowEnumerator.GetAppWindows().Count > 1;
     public bool Execute() => ShellDispatch.CascadeWindows();
@@ -67,7 +68,7 @@ public sealed class CascadeWindowsAction : IAction
 public sealed class TileHorizontallyAction : IAction
 {
     public string Id => "tile-horizontally";
-    public string DisplayName => "堆叠显示窗口";
+    public string DisplayName => Localization.Get("action.tile-horizontally");
     public string IconKey => "tile-h";
     public bool CanExecute() => WindowEnumerator.GetAppWindows().Count > 1;
     public bool Execute() => ShellDispatch.TileHorizontally();
@@ -76,7 +77,7 @@ public sealed class TileHorizontallyAction : IAction
 public sealed class TileVerticallyAction : IAction
 {
     public string Id => "tile-vertically";
-    public string DisplayName => "并排显示窗口";
+    public string DisplayName => Localization.Get("action.tile-vertically");
     public string IconKey => "tile-v";
     public bool CanExecute() => WindowEnumerator.GetAppWindows().Count > 1;
     public bool Execute() => ShellDispatch.TileVertically();
@@ -85,7 +86,7 @@ public sealed class TileVerticallyAction : IAction
 public sealed class TaskbarSettingsAction : IAction
 {
     public string Id => "taskbar-settings";
-    public string DisplayName => "任务栏设置";
+    public string DisplayName => Localization.Get("action.taskbar-settings");
     public string IconKey => "settings";
 
     public bool CanExecute() => true;
