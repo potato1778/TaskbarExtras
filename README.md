@@ -1,46 +1,42 @@
 # TaskbarExtras
 
-**English** · [简体中文](README.zh-CN.md)
+[English](README.en.md) · **简体中文**
 
-Windows 11 threw away most of the taskbar right-click menu. This puts it back.
+把 Windows 11 删掉的任务栏右键菜单补回来。
 
-![The win11 skin](docs/screenshot-menu-en.png)
+![win11 皮肤](docs/screenshot-win11-zh.png)
 
----
+## 起因
 
-## How this started
+那天我左手端着快乐水，右手刚离开键盘，想回桌面开个东西。
 
-Left hand holding a drink, right hand just off the keyboard, and I wanted the desktop.
+按 `Win+D` 得腾出手，我没有。于是很自然地右键任务栏，准备点「显示桌面」。
 
-`Win+D` needs a hand I didn't have. So I did the obvious thing and right-clicked the taskbar for **Show desktop**.
+结果这个选项没了。
 
-It isn't there any more. Windows 11 removed it.
+微软你在干什么啊 😡
 
-Fine. I'll do it myself.
+行，我自己加回来。 ε=( o｀ω′)ノ
 
----
+## 能干嘛
 
-## What you get
+右键任务栏的空白处：
 
-Right-click the taskbar's empty background:
-
-| Entry | What it does |
+| | |
 |---|---|
-| Show desktop | Minimise everything; click again to restore |
-| Task Manager | Open Task Manager |
-| Cascade windows | Stack all windows diagonally |
-| Show windows stacked | Tile them top and bottom |
-| Show windows side by side | Tile them left and right |
-| Taskbar settings | Open the taskbar page in Settings |
-| Exit TaskbarExtras | Quit |
+| 显示桌面 | 最小化所有窗口，再点一次还原 |
+| 任务管理器 | |
+| 层叠窗口 | |
+| 堆叠显示窗口 | |
+| 并排显示窗口 | |
+| 任务栏设置 | |
+| 退出 TaskbarExtras | |
 
-Only the **empty** part of the taskbar is intercepted. Right-clicking Start still gives you `Win+X`, right-clicking a task button still gives you its jump list, right-clicking a tray icon still gives you its own menu. None of that is touched.
+只有任务栏**空白处**会被拦截。右键开始按钮还是 Win+X，右键任务图标还是跳转列表，右键托盘图标还是各自的菜单 —— 这些都没动。
 
----
+## 跑起来
 
-## Running it
-
-Grab it from [Releases](../../releases), or build it:
+去 [Releases](../../releases) 下载，或者自己编：
 
 ```bash
 dotnet publish src/TaskbarExtras.App -c Release -r win-x64 --self-contained true \
@@ -48,61 +44,60 @@ dotnet publish src/TaskbarExtras.App -c Release -r win-x64 --self-contained true
   -p:EnableCompressionInSingleFile=true -o publish
 ```
 
-One self-contained exe comes out. Double-click it. **No admin rights**, no .NET install needed.
+出来一个 exe，双击就行。不用管理员权限，也不用预先装 .NET。
 
 ```
-TaskbarExtras.exe                     start
-TaskbarExtras.exe --quit              ask a running instance to stop
-TaskbarExtras.exe --lang zh|en        force the UI language (defaults to your system)
-TaskbarExtras.exe --skin win11|win10  menu appearance (defaults to win11)
-TaskbarExtras.exe --preview           show the menu once, for trying out a skin
-TaskbarExtras.exe --help              print this
+TaskbarExtras.exe                     启动
+TaskbarExtras.exe --quit              让正在运行的实例退出
+TaskbarExtras.exe --lang zh|en        强制界面语言（默认跟随系统）
+TaskbarExtras.exe --skin win11|win10  菜单外观（默认 win11）
+TaskbarExtras.exe --preview           只显示一次菜单，用来预览皮肤
+TaskbarExtras.exe --help              显示说明
 ```
 
-## Quitting
+## 怎么退出
 
-There's no main window, so there's nothing to close. Three ways out:
+没有主窗口，所以没东西可以关。三条路：
 
-1. Right-click the taskbar → **Exit TaskbarExtras** (last row of the menu)
-2. Right-click the tray icon → Exit. It lives in the `^` overflow flyout — a dark square with three bars.
+1. 右键任务栏 → 菜单最后一项「退出 TaskbarExtras」
+2. 右键托盘图标 → 退出（图标在 `^` 折叠区里，深色方块加三道横杠）
 3. `TaskbarExtras.exe --quit`
 
----
+## 皮肤
 
-## Skins
+菜单外观全写在 `ResourceDictionary` 里。加一套皮肤就是加一个 xaml，不用改 C#。
 
-Everything the menu looks like lives in a `ResourceDictionary`. A new skin is a new xaml file; no C# changes.
-
-| win11 (default) | win10 |
+| win11（默认） | win10 |
 |---|---|
-| ![win11](docs/screenshot-menu-en.png) | ![win10](docs/screenshot-menu-win10-en.png) |
-| Rounded, roomy, soft shadow — sits next to the system's own menus without looking out of place | Square, tight, flat — pick this if you want the old feel |
+| ![win11](docs/screenshot-win11-zh.png) | ![win10](docs/screenshot-win10-zh.png) |
 
 ```bash
-TaskbarExtras.exe --preview --skin win10    # look before you commit
+TaskbarExtras.exe --preview --skin win10
 ```
 
----
+## 两条原则
 
-## Two rules I held myself to
+**不注入任何进程。** 不往 `explorer.exe` 里塞 DLL，不打补丁，不改系统文件。它就是个普通进程，关了什么都不留。
 
-**One: nothing gets injected.** No DLL into `explorer.exe`, no patching, no touching system files. It's an ordinary process. Start it and it sits in the background; close it and nothing is left behind.
+**只用文档化 API。** 拦截右键用 `WH_MOUSE_LL`（跑在自己进程里），窗口排布用 `IShellDispatch`，任务栏位置用 `SHAppBarMessage` 和 `GetMonitorInfo`。没有私有结构体偏移，也没有特征码扫描。
 
-**Two: documented APIs only.** The right-click is intercepted with `WH_MOUSE_LL`, in our own process. Window arrangement goes through `IShellDispatch`. The taskbar geometry comes from `SHAppBarMessage` and `GetMonitorInfo`. Nothing here depends on a private struct offset or a byte signature.
+原因很实际：靠注入实现的工具，每次 Windows 更新都得跟着改，没跟上就整个坏掉。实测数据和推演过程在 [docs/DESIGN.md](docs/DESIGN.md)。
 
-Why care? Because tools built on injection have to be rewritten every time Windows ships a feature update, and when they fall behind they don't degrade — they break the shell. That's a much worse failure mode than a missing menu entry.
+## 下一步
 
-This isn't a slogan. The menu was prototyped in Python + ctypes through four rounds of spikes, and only then written in C#. The measurements and the reasoning are in [`docs/DESIGN.md`](docs/DESIGN.md) — including the parts I got wrong and had to reverse.
+- [ ] 菜单加动画（淡入、滑出）
+- [ ] 做更多样式
+- [ ] Windows 10 风格的开始菜单
+- [ ] 恢复磁贴
+- [ ] 恢复 Windows 10 风格的任务栏和托盘
 
----
+## 已知问题
 
-## Known issues
+- 只在单屏 150% 缩放上测过。双屏和混合 DPI 没验证。
+- 右键到菜单出来有约 40ms 延迟 —— 鼠标钩子拦下右键再渲染，这个开销消不掉。
+- 没有配置文件，皮肤和语言只能靠命令行参数。
+- 没做和其他任务栏工具的兼容，一起装可能打架。
 
-- **Only tested on a single 150%-scaled display.** Dual monitors and mixed DPI are handled in theory but unverified, and unverified means unverified.
-- **About 40 ms of latency** between the right-click and the menu appearing. Swallowing the click and then rendering can't be made free.
-- No config file. Skin and language are command-line only.
-- No compatibility handling for other taskbar tools; running them side by side may fight.
+## 许可
 
-## Licence
-
-MIT.
+MIT。
