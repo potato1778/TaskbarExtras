@@ -16,6 +16,18 @@
 
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+
+    <!--
+      Framework-dependent builds otherwise demand the exact major version (9.0) and refuse to
+      start on a machine that only has 10.x. That is not a theoretical problem: installing the
+      .NET SDK with scoop sets a USER-level DOTNET_ROOT pointing at the SDK directory, and an
+      SDK bundle ships Microsoft.WindowsDesktop.App for the SDK's own version only. The apphost
+      honours DOTNET_ROOT and does NOT fall back to the machine-wide install, so the app dies
+      with "You must install or update .NET to run this application" on a machine that plainly
+      has the runtime. Rolling forward on major removes that whole failure mode.
+      The real distribution answer is still a self-contained publish - see README.
+    -->
+    <RollForward>Major</RollForward>
   </PropertyGroup>
 
 </Project>

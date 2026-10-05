@@ -160,7 +160,19 @@ Roadmap:
 
 ---
 
-## Build
+## Getting it running
+
+**Recommended — self-contained, single file.** Nothing to install on the target machine:
+
+```bash
+dotnet publish src/TaskbarExtras.App -c Release -r win-x64 --self-contained true \
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+  -p:EnableCompressionInSingleFile=true -o publish/win-x64
+```
+
+That yields one `TaskbarExtras.exe`. Double-click it and a tray icon appears.
+
+**From source (framework-dependent):**
 
 ```bash
 git clone https://github.com/potato1778/TaskbarExtras
@@ -168,9 +180,26 @@ cd TaskbarExtras
 dotnet build TaskbarExtras.slnx -c Release
 ```
 
-Requires the .NET SDK. The app targets `net9.0-windows` and needs no administrator rights.
+Needs the .NET SDK. Targets `net9.0-windows`. **No administrator rights** — the manifest declares `asInvoker` and nothing here needs elevation.
 
-> **Smart App Control must be off.** Not because of anything this app does, but because unsigned binaries are blocked by it. The app declares `asInvoker` and requests no elevation.
+### ⚠️ "You must install or update .NET to run this application"
+
+Before installing anything, check one environment variable:
+
+```
+echo %DOTNET_ROOT%
+```
+
+If it points at an **SDK** directory, the apphost will look for the Windows Desktop runtime *only there* and will **not** fall back to `C:\Program Files\dotnet`. Installing the .NET SDK with **scoop** sets exactly that user-level variable — and an SDK bundle only ships `Microsoft.WindowsDesktop.App` for the SDK's own version. The result: a `net9.0-windows` app refuses to start on a machine that plainly has a 9.0 runtime installed. (This is not hypothetical; it is the bug that produced this section.)
+
+Two ways out:
+
+- **Publish self-contained** (above). No runtime lookup happens at all.
+- **Delete the user-level `DOTNET_ROOT`** — `setx DOTNET_ROOT ""`, then open a new shell. The `dotnet` CLI does not need it; it finds its own root from its executable path.
+
+As a belt-and-braces measure this project also sets `<RollForward>Major</RollForward>`, so a framework-dependent build accepts a *newer* major runtime rather than demanding 9.0 exactly.
+
+> **Smart App Control must be off.** Not because of anything this app does, but because it blocks unsigned binaries.
 
 ---
 

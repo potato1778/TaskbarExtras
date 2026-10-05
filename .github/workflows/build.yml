@@ -23,9 +23,20 @@ jobs:
       - name: Build
         run: dotnet build TaskbarExtras.slnx -c Release --no-restore
 
+      # Ship something people can actually run: self-contained, so no runtime lookup and no
+      # DOTNET_ROOT surprises on the user's machine.
+      - name: Publish (self-contained single file)
+        run: >
+          dotnet publish src/TaskbarExtras.App -c Release -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -o publish/win-x64
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TaskbarExtras
-          path: src/TaskbarExtras.App/bin/Release/net9.0-windows/
+          name: TaskbarExtras-win-x64
+          path: publish/win-x64/TaskbarExtras.exe
           if-no-files-found: error
