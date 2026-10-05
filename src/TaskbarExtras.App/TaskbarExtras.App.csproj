@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>TaskbarExtras.App</RootNamespace>
+    <AssemblyName>TaskbarExtras</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <!-- WinForms is pulled in for one reason only: NotifyIcon. -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!--
+      WFO0003 tells us to drop the DPI settings from app.manifest and use WinForms'
+      ApplicationHighDpiMode instead. That advice assumes a WinForms entry point. This app is
+      WPF — we never call WinForms' Application.Run — so the manifest is the correct and
+      only place to declare PerMonitorV2. Suppressing rather than "fixing".
+    -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TaskbarExtras.Actions\TaskbarExtras.Actions.csproj" />
+    <ProjectReference Include="..\TaskbarExtras.Shell\TaskbarExtras.Shell.csproj" />
+  </ItemGroup>
+
+</Project>

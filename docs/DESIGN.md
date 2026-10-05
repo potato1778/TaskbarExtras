@@ -1,0 +1,684 @@
+# TaskbarExtras 技术设计文档
+
+| 项 | 值 |
+|---|---|
+| 版本 | v0.1（草案） |
+| 日期 | 2026-10-05 |
+| 状态 | **待评审** —— 未写代码 |
+| 暂名 | `TaskbarExtras`（备选：`ShelfBar` / `RetroShelf`，可改） |
+| 目标平台 | Windows 11 26H2（build 26300.9457），兼容 Win10 21H2+ |
+
+---
+
+## 0. 一句话
+
+**不注入任何进程**，用一个 AppBar 窗口给 Windows 11 补回被微软砍掉的 shell 功能（显示桌面、完整任务栏菜单），并把外观做成可换皮肤——从 Win10 扁平风一路做到 XP Luna。
+
+---
+
+## 1. 问题与目标
+
+### 1.1 要解决的问题
+
+Windows 11 相对 Windows 10 砍掉了：
+
+| 被砍掉的东西 | 现状 |
+|---|---|
+| 任务栏右键菜单的「显示桌面」 | **已消失**，且 26H2 上无法恢复（详见 §5.1） |
+| 任务栏右键菜单的窗口排布（层叠/堆叠/并排） | 消失 |
+| 任务栏右键菜单的「工具栏」 | 消失 |
+| 任务栏右键菜单的「锁定任务栏」 | 消失 |
+| 任务栏可拖到屏幕左/右/上 | 消失 |
+| 任务栏图标不合并 + 显示标签 | 消失 |
+| 经典开始菜单 | 消失 |
+
+### 1.2 设计目标（按优先级）
+
+1. **抗 Windows 更新** —— 只用文档化 API，Windows 升级不废
+2. **可换皮肤** —— 皮肤是数据（XAML），不是代码，社区能贡献
+3. **不做全局 hook** —— 不用 `WH_MOUSE_LL`、不注入 explorer（见 §6.1）
+4. 零依赖分发（自包含 .NET）
+
+### 1.3 非目标（明确不做）
+
+- 替换整个 shell / 接管桌面图标与壁纸
+- 替换系统托盘的通知区域（这是最难的部分，成本远超收益）
+- 支持 Windows 8.1 及更早
+
+---
+
+## 2. 路线选择：自研 vs 贡献 RetroBar
+
+在动手之前必须先回答这个问题。
+
+| | 自研 TaskbarExtras | 给 RetroBar 提 PR |
+|---|---|---|
+| 已有基础 | 零 | AppBar、托盘、缩略图、多屏、45 语言、XAML 皮肤系统**全有** |
+| 缺口 | 全部 | 只缺 7 / 8 / 10 三套皮肤 + 经典开始菜单 |
+| 工期 | 阶段 1 几天，阶段 2 几周 | 一套皮肤几天 |
+| 作品集信号 | 「我写了整个东西」 | 「我的 PR 被知名开源项目合并」 |
+| 许可 | 自己的 | Apache-2.0（可 fork，需保留 NOTICE、标注修改文件） |
+| 风险 | 可能烂尾 | 依赖维护者 review 节奏 |
+
+**结论：两者不冲突，建议按顺序做。**
+
+- 先给 RetroBar 写 **Win7 Aero 皮肤**（几天，纯 XAML，零 C#）→ 用最小成本验证「你到底喜不喜欢做这件事」，同时拿到一个真实的开源贡献
+- 再决定要不要自研。若自研，**RetroBar 的皮肤格式就是现成的参考实现**，不用重新设计
+
+本文档后续章节描述**自研**路线的设计。
+
+---
+
+## 3. 总体架构
+
+### 3.1 分层
+
+```
+┌─────────────────────────────────────────────┐
+│ TaskbarExtras.App        (WPF 宿主、托盘、设置) │
+├─────────────────────────────────────────────┤
+│ TaskbarExtras.Skins      (皮肤引擎 + 内置皮肤)  │  ← 纯数据驱动
+├─────────────────────────────────────────────┤
+│ TaskbarExtras.Actions    (动作注册表 + 实现)    │  ← 显示桌面/任务管理器/…
+├─────────────────────────────────────────────┤
+│ TaskbarExtras.Shell      (AppBar、窗口枚举、COM) │  ← 全部 P/Invoke 集中在这
+└─────────────────────────────────────────────┘
+```
+
+**关键约束：所有 P/Invoke 与 COM 互操作只能出现在 `TaskbarExtras.Shell` 里。** 这样将来某天某个 API 变了，改动范围被限制在一个项目内。
+
+### 3.2 进程与线程模型
+
+- 单进程，单 UI 线程
+- `SHAppBarMessage` **必须在拥有该窗口的 UI 线程上调用**（MSDN 未明写，但跨线程调用行为未定义）
+- 系统发来的 AppBar 通知（`uCallbackMessage`）也到达 UI 线程 → 在 `HwndSourceHook` 里处理，不要阻塞
+
+---
+
+## 4. 核心机制一：AppBar
+
+### 4.1 协议（已对 MSDN 核实）
+
+```c
+UINT_PTR SHAppBarMessage(DWORD dwMessage, PAPPBARDATA pData);
+
+typedef struct _AppBarData {
+  DWORD  cbSize;              // 必须填 sizeof(APPBARDATA)
+  HWND   hWnd;                // 你的窗口
+  UINT   uCallbackMessage;    // 自定义消息号，系统用它给你发通知
+  UINT   uEdge;               // ABE_LEFT=0, ABE_TOP=1, ABE_RIGHT=2, ABE_BOTTOM=3
+  RECT   rc;                  // 位置（进出参）
+  LPARAM lParam;
+} APPBARDATA;
+```
+
+消息常量（**全部已核实**）：
+
+| 常量 | 值 | 用途 |
+|---|---|---|
+| `ABM_NEW` | `0x00` | 注册 AppBar，指定回调消息号 |
+| `ABM_REMOVE` | `0x01` | 注销 |
+| `ABM_QUERYPOS` | `0x02` | 请求系统校验一个候选位置 |
+| `ABM_SETPOS` | `0x03` | 提交最终位置（系统据此保留屏幕空间） |
+| `ABM_GETSTATE` | `0x04` | 取任务栏的 autohide / always-on-top 状态 |
+| `ABM_GETTASKBARPOS` | `0x05` | 取**系统任务栏**的矩形与所在边 |
+| `ABM_ACTIVATE` | `0x06` | 激活/取消激活 |
+| `ABM_GETAUTOHIDEBAR` | `0x07` | 取某边的 autohide AppBar |
+| `ABM_SETAUTOHIDEBAR` | `0x08` | 设置某边的 autohide AppBar |
+| `ABM_WINDOWPOSCHANGED` | `0x09` | 通知系统你的位置变了 |
+| `ABM_SETSTATE` | `0x0A` | 设置 autohide / always-on-top |
+| `ABM_GETAUTOHIDEBAREX` | `0x0B` | 同上，但指定显示器 |
+| `ABM_SETAUTOHIDEBAREX` | `0x0C` | 同上，但指定显示器 |
+
+回调通知（系统 → 你）：
+
+| 通知 | 你要做的事 |
+|---|---|
+| `ABN_POSCHANGED` (1) | **重新走一遍 QUERYPOS → SETPOS**，否则位置会被别的 AppBar 挤歪 |
+| `ABN_FULLSCREENAPP` (2) | 有全屏应用时隐藏自己（仅 autohide 需要） |
+| `ABN_STATECHANGE` (0) | autohide / always-on-top 状态变了 |
+| `ABN_WINDOWARRANGE` (3) | 窗口排布菜单被展开 |
+
+### 4.2 注册与定位时序
+
+```csharp
+// 1. 注册
+var abd = new APPBARDATA { cbSize = Marshal.SizeOf<APPBARDATA>(),
+                           hWnd = hwnd, uCallbackMessage = WM_APPBAR_CALLBACK };
+SHAppBarMessage(ABM_NEW, ref abd);
+
+// 2. 查询位置（系统可能缩小你请求的矩形）
+abd.uEdge = ABE_BOTTOM;
+abd.rc = desiredRect;
+SHAppBarMessage(ABM_QUERYPOS, ref abd);
+
+// 3. 关键：按你的高度修正（系统可能把高度改成 0 或挤掉）
+abd.rc.top = abd.rc.bottom - myHeight;   // 底部边时
+
+// 4. 提交
+SHAppBarMessage(ABM_SETPOS, ref abd);
+
+// 5. 真正移动窗口（必须用 SetWindowPos，不能用 WPF 的 Left/Top）
+SetWindowPos(hwnd, IntPtr.Zero, abd.rc.left, abd.rc.top,
+             abd.rc.right - abd.rc.left, abd.rc.bottom - abd.rc.top,
+             SWP_NOZORDER | SWP_NOACTIVATE);
+```
+
+**易错点**：
+
+- 第 3 步不能省。系统在 `QUERYPOS` 里可能把你请求的矩形改得面目全非，直接拿它的结果 `SETPOS` 会得到一个 0 高度的窗口。
+- 窗口样式用 `WS_POPUP` + `WS_EX_TOOLWINDOW`（不进 Alt+Tab）。**不要设 `WS_EX_TOPMOST`** —— AppBar 的层叠顺序由 shell 管，自己设会打架。
+- 窗口必须是**顶层窗口**，不能有 owner，不能是子窗口。
+- 退出前必须 `ABM_REMOVE`，否则会在系统里留下一个幽灵 AppBar 占着屏幕空间（重启 explorer 才能清掉）。
+
+### 4.3 ⚠️ 与系统任务栏共存 —— 本项目最大的未知
+
+**系统任务栏自己就是一个 AppBar，占满了屏幕底边。**
+
+我们在同一条边（`ABE_BOTTOM`）再注册一个 AppBar，系统会怎么安排？两种可能：
+
+- (A) 把我们的条挤到任务栏**上方**，形成两层
+- (B) 与任务栏**并排分掉**底边宽度（我们的条被挤到某个角落，宽度被压缩）
+
+MSDN 明确说明 `ABM_GETTASKBARPOS` **只返回系统任务栏**，并且：
+
+> 屏幕上有第三方的 app bar 时，未被系统任务栏覆盖的区域**未必对用户可见**。要取「既不被任务栏也不被其他 app bar 占用」的可用区域，用 `GetMonitorInfo`。
+
+也就是说：**可用工作区要用 `GetMonitorInfo().rcWork`（已扣掉所有 app bar），而不是 `rcMonitor`（全屏）。** 这是个容易踩的坑。
+
+**结论：已由 Spike S1 实测回答，答案是 (A)。**
+
+> **✅ Spike S1 结果（2026-10-05，本机 26H2 build 26300.9457 实测）**
+>
+> 用 Python + ctypes 造了一个真正的 AppBar 窗口（`WS_POPUP` + `WS_EX_TOOLWINDOW`），
+> 在系统任务栏正常存在的前提下注册底边 AppBar，高 30px：
+>
+> | 时刻 | `rcWork` | 任务栏 rect |
+> |---|---|---|
+> | 注册前 | `(0,0)-(2560,1528)` | `(0,1528)-(2560,1600)` 2560×72 |
+> | `ABM_SETPOS` 后 | `(0,0)-(2560,**1498**)` | `(0,1528)-(2560,1600)` **未变** |
+> | `ABM_REMOVE` 后 | `(0,0)-(2560,1528)` ✅ 还原 | — |
+>
+> - `ABM_QUERYPOS` **原样返回**了我请求的矩形，没有缩水
+> - **我的 AppBar 落在任务栏正上方**（`(0,1498)-(2560,1528)`），全宽，任务栏毫发无损
+> - 系统**确实**为我的 AppBar 保留了 30px（`rcWork` 底部从 1528 变 1498）
+> - `ABM_REMOVE` 后 `rcWork` **精确还原**
+> - 收到 2 次 `ABN_STATECHANGE` 回调，无 `ABN_POSCHANGED`
+>
+> → **方案 (A)：同边 AppBar 是「沿该边垂直堆叠」，不是并排分宽度。协议完全可靠。**
+
+#### ⚠️ S1 的附加发现：AppBar 没有「窄幅」这个选项
+
+补测：把请求矩形改成**只占右侧 500px 宽**（`(2060,1498)-(2560,1528)`）。
+
+| 项 | 结果 |
+|---|---|
+| `ABM_QUERYPOS` / `ABM_SETPOS` 返回 | `(2060,1498)-(2560,1528)` 500×30 —— 窗口确实只有 500px 宽 |
+| **`rcWork`** | **`(0,0)-(2560,1498)`** ← 整条边 2560px 全部被扣掉 30px |
+
+> **只要注册 AppBar，代价就是「整条边 × 高度」的全宽带子，与你的窗口实际多宽无关。**
+>
+> 这条约束直接决定了 UI 形态（见 §4.4）。
+
+### 4.4 备选方案：悬浮覆盖窗口
+
+如果 S1 的结果不理想（比如 AppBar 被挤到难看的位置，或者高度只有几像素），退回到这个方案：
+
+- 普通 `WS_POPUP | WS_EX_TOOLWINDOW | WS_EX_TOPMOST` 窗口
+- 用 `SetWindowPos` 把它贴在任务栏右端的**上方**，看起来像任务栏的一部分
+- 监听 `WM_DISPLAYCHANGE` / `WM_SETTINGCHANGE` / 定时轮询 `ABM_GETTASKBARPOS`，任务栏位置变了就跟着挪
+
+**代价（必须如实写进 README）**：
+
+- 它是 topmost，会**浮在最大化的窗口之上**，遮住内容
+- 不占用工作区 → 窗口最大化时会被它盖住
+
+| | AppBar | 悬浮覆盖 |
+|---|---|---|
+| 不遮内容 | ✅ 系统保证 | ❌ 会遮 |
+| 视觉融入任务栏 | 一般（是独立一条） | ✅ 好 |
+| 依赖未知行为 | ✅ 有（S1） | ❌ 无 |
+| 复杂度 | 中 | 低 |
+
+**S1 之后的修订决策：**
+
+S1 证明了 AppBar 协议可靠，但附加发现说明**任何 AppBar 都要付出「全宽一条带子」的代价**。
+对一个「就想加两个按钮」的工具来说这个视觉代价过高（所有最大化窗口被顶上去 30px，
+任务栏上方多出一条明显不属于系统的横条）。
+
+于是 UI 形态重新排序：
+
+| 形态 | 屏幕空间代价 | 视觉影响 | 结论 |
+|---|---|---|---|
+| **A. AppBar 全宽带** | 全宽 × 高度（S1 实测确认） | 像第二条任务栏 | 降级为 **v0.2 可选**（默认关闭），留到做完整任务栏替换时启用 |
+| **B. 悬浮 topmost 条** | 0，但会盖住最大化窗口内容 | 能融入任务栏 | 备选 |
+| **C. 不占屏幕空间：托盘图标 + 自绘右键菜单** | **0** | **完全不改外观** | ✅ **MVP 首选** |
+
+> **关键洞察：用户真正要的是「被微软砍掉的那个右键菜单」，不是「多一条任务栏」。**
+
+MVP 形态因此改为 **C**：托盘图标 + 自绘的 Win10 风格任务栏菜单
+（显示桌面 / 任务管理器 / 层叠窗口 / 堆叠显示 / 并排显示 / 任务栏设置），
+并叠加 §6.4 的 **B2′**，让菜单能在**右键任务栏时**自动弹出。
+
+AppBar 条（形态 A）降级为 v0.2 可选项 —— **反正 S1 已经把它的技术风险清零了**，
+随时可以启用。
+
+---
+
+## 5. 核心机制二：动作实现
+
+每个按钮/菜单项 = 一个 `IAction`。设计成注册表，新增动作不改核心代码。
+
+### 5.1 显示桌面 —— 有个坑
+
+**先纠正一个常见误解：`IShellDispatch` 里没有 `ToggleDesktop` 方法。**
+
+已核实的 `IShellDispatch` 方法列表里，与桌面相关的只有：
+
+| 方法 | MSDN 原话 | 对应 Win10 菜单项 |
+|---|---|---|
+| `MinimizeAll` | 等同于点任务栏的 **Show Desktop** 图标 | 显示桌面 |
+| `UndoMinimizeALL` | 等同于**再点一次** Show Desktop 图标 | （还原） |
+| `CascadeWindows` | 等同于右键任务栏选 **Cascade windows** | 层叠窗口 |
+| `TileHorizontally` | 等同于右键任务栏选 **Show windows stacked** | 堆叠显示窗口 |
+| `TileVertically` | 等同于右键任务栏选 **Show windows side by side** | 并排显示窗口 |
+| `TrayProperties` | 等同于右键任务栏选 **Properties** | 任务栏设置 |
+| `ShutdownWindows` | 等同于点开始菜单的 Shut Down | 关机 |
+
+所以「显示桌面」是个 **toggle** 语义，没有单一 API，有两条实现路径：
+
+**路径 A（推荐，文档化）**：用 `MinimizeAll` / `UndoMinimizeALL`，自己维护状态
+
+```
+if (桌面当前可见)  shell.UndoMinimizeALL();
+else               shell.MinimizeAll();
+```
+
+问题：状态怎么判断？不能只靠自己的布尔量（用户可能用 `Win+D` 或别的方式切了桌面）。**必须能查询当前桌面是否可见**——这是本设计的一个开放问题，见 §10 风险 R4。
+
+**路径 B（半文档化）**：`PostMessage(FindWindow("Shell_TrayWnd"), WM_COMMAND, 419, 0)`
+
+`419` = `MIN_ALL`，`416` = `MIN_ALL_UNDO`。这是流传很久的命令 ID，但**属于任务栏内部实现，MSDN 无记载**。
+
+⚠️ 26H2 上任务栏已改为 XAML 合成（实测：`Shell_TrayWnd` 下是 `Windows.UI.Composition.DesktopWindowContentBridge` + `MSTaskSwWClass`），**这个命令 ID 是否还能被正确路由，必须实测。**
+
+> **✅ Spike S2 结果（2026-10-05 实测）：419 / 416 在 26H2 上仍然生效。**
+> 发送前 6 个可见未最小化窗口 → 发 `WM_COMMAND 419`（MIN_ALL）后 **0 个** →
+> 发 `416`（MIN_ALL_UNDO）后 **6 个全部还原**。
+>
+> 但**实现仍优先走文档化的 COM 路径**（`MinimizeAll` / `UndoMinimizeALL`），
+> 把 419/416 作为已验证的备用方案 —— 它依赖任务栏内部命令 ID，属半文档化。
+
+**已排除的方案**：`EnumWindows` + 逐个 `ShowWindow(SW_MINIMIZE)`。原因：无法正确还原、对 UWP/打包应用行为不一致、会破坏窗口的 z-order 状态。
+
+### 5.2 任务管理器
+
+`Process.Start("taskmgr.exe")`。若已运行则激活已有窗口（用 `EnumWindows` 找 `Taskmgr` 类名）。
+
+### 5.3 动作注册表
+
+```csharp
+public interface IAction
+{
+    string Id { get; }          // "show-desktop"
+    string DisplayName { get; } // "显示桌面"
+    string IconKey { get; }     // 皮肤决定用什么图标
+    bool CanExecute();
+    void Execute();
+}
+```
+
+内置动作：`show-desktop` / `task-manager` / `cascade-windows` / `tile-h` / `tile-v` / `taskbar-settings` / `lock-workstation`（`user32!LockWorkStation`，文档化）/ `open-config`。
+
+配置里只写 `id`，动作实现由代码注册 → 配置文件不依赖代码细节。
+
+---
+
+## 6. 核心机制三：菜单
+
+### 6.1 触发方式 —— 一个诚实的取舍
+
+Win11 的**任务栏右键菜单没有任何第三方扩展点**（它不像文件资源管理器有 shell extension）。所以想「让显示桌面回到那个菜单里」，只有两条路：
+
+| 方案 | 做法 | 优点 | 代价 |
+|---|---|---|---|
+| **(a) 自己的入口** | 点我们 AppBar 上的按钮 → 弹出自绘菜单 | 零 hackery，完全安全 | 不是「右键任务栏」，肌肉记忆要改 |
+| **(b) 全局鼠标钩子** | `WH_MOUSE_LL` 检测右键落点是否在 `Shell_TrayWnd` 矩形内 → 弹自绘菜单 | 肌肉记忆完全一致 | 全局钩子；**AV 会盯上**；与「不注入」卖点自相矛盾 |
+
+**决策：默认做 (a)。(b) 做成默认关闭的可选项，README 里如实写明代价。**
+
+理由：(b) 的 `WH_MOUSE_LL` 虽然不注入，但它是全局输入钩子——安全软件对此敏感，而且一旦被拦就是「点了没反应」这种最难排查的故障。项目最大的卖点是「不碰系统内部」，不该为了一个交互习惯把它赔掉。
+
+### 6.2 自绘菜单
+
+- WPF `Popup`（`AllowsTransparency=true`，`StaysOpen=false`）
+- 需要在菜单外点击时关闭 + 正确的 `WS_EX_NOACTIVATE` 行为，避免抢焦点
+- 支持子菜单（工具栏）、分隔符、勾选项（锁定任务栏）
+- 皮肤驱动（§7）：边框、内边距、高亮色、图标尺寸全部来自皮肤
+
+### 6.3 同类工具的注入/劫持机制调研（2026-10-05）
+
+要判断 (b) 的代价，先看清别人是怎么做的。
+
+#### ExplorerPatcher（开源，机制有文档）
+
+| 环节 | 做法 |
+|---|---|
+| 注入方式 | **DLL 搜索顺序劫持**。把主 DLL 改名成 `dxgi.dll` 放进应用目录（Windows 先搜应用目录再搜 System32） |
+| 注入点 | `C:\Windows\dxgi.dll` → explorer.exe；`StartMenuExperienceHost_*\dxgi.dll` → StartMenuExperienceHost.exe；`ShellExperienceHost_*\dxgi.dll` → ShellExperienceHost.exe |
+| 任务栏实现 | **按 Windows build 分发的独立实现**：`ep_taskbar.0.dll`（Win10 原生任务栏）/ `.1`（21H2）/ `.2`（22H2）/ `.3`（Dev）/ `.4`（Canary nuked tray）/ `.5`（Canary 最新）。安装时 `PickTaskbarDll()` 只装当前 build 对应的那一个 |
+| 安装流程 | `taskkill /f /im explorer.exe` → 解内嵌 AES-256 加密 ZIP → 部署 → `regsvr32` 注册 COM → 重启 explorer |
+| 致命副作用 | explorer 启动时会加载 EP 的 dxgi.dll；**该文件存在但被拦截加载 → explorer 直接起不来** |
+
+**结论：EP 的本质是「每个 Windows build 一套任务栏实现」。** 这正是它必须跟着 Windows 更新发版的原因，也是用户实测 StartAllBack 3.9.16 在 26H2 上失效的同类病根。
+
+#### StartAllBack（闭源，本机取证）
+
+在本机做了完整取证，**排除了以下全部加载方式**：
+
+| 检测项 | 结果 |
+|---|---|
+| `AppInit_DLLs`（HKLM + HKCU 两个视图） | 空 / 未设置 |
+| `AppCertDlls` | 未设置 |
+| **`C:\Windows` 根目录代理 DLL 劫持** | 该目录下**只有 2 个非微软 DLL**：`pyshellext.amd64.dll`（Python Software Foundation）、`twain_32.dll`（Twain Working Group）。**无任何劫持** |
+| `ShellServiceObjectDelayLoad` | 0 项 |
+| `ShellServiceObjects`（18 个 CLSID 逐个解析 InprocServer32） | **全部指向微软系统 DLL**（shell32 / stobject / wpdshserviceobj …） |
+| `HKLM\SOFTWARE\Classes\CLSID`（**7836 个全扫**） | 0 命中 |
+| `HKCU\SOFTWARE\Classes`（含其下 29 个 CLSID） | 0 命中 |
+| `Shell Extensions\Approved` / `ShellIconOverlayIdentifiers` / `Browser Helper Objects` / `shellex\ContextMenuHandlers` | 0 命中 |
+| `ShellExecuteHooks` / `Winlogon\Notify` | 键不存在 |
+| Run / RunOnce / 同名服务 | 无 |
+| `C:\Windows\System32\Tasks` | **读不到（拒绝访问）** |
+
+**唯一剩下的候选是计划任务。** 旁证：中文汉化版说明里明确提到「自动删除 **StartAllBack Update 计划任务**」，说明官方安装包确实会创建计划任务。因此最可能的机制是**登录时由计划任务拉起辅助进程，再向 explorer 注入**（`CreateRemoteThread` 一类），这条路径需要管理员权限才能完整枚举。
+
+**取证结论：StartAllBack 刻意把加载点放在了不可读的位置。** 这件事本身就是「为什么这类工具总被安全软件盯上」的答案。
+
+#### 其他开源项目
+
+| 项目 | 机制 | 是否注入 |
+|---|---|---|
+| **Windhawk**（GPL-3.0） | 注入框架 + mod 用**符号/模式匹配**定位并 patch 目标函数 | ✅ 注入 |
+| **RetroBar**（Apache-2.0） | **完全不注入**。自己实现任务栏，靠 AppBar + 隐藏原生任务栏 | ❌ |
+| **ContextMenuForWindows11** | **MSIX 打包**，走微软给**文件右键菜单**提供的文档化扩展点（`IExplorerCommand`） | ❌ |
+
+**这里有一条极关键的分界线：**
+
+- **文件 / 文件夹右键菜单** → 微软提供了**文档化扩展点**（MSIX + `IExplorerCommand`）。所以 ContextMenuForWindows11 完全不用注入，打包成 MSIX 就能加菜单项。
+- **任务栏右键菜单** → **没有任何第三方扩展点**。
+
+> **不是大家不想用文档化的办法，是任务栏菜单这条路上微软根本没修路。** 这就是为什么所有「恢复任务栏菜单」的工具都在注入。
+
+### 6.4 (b) 方案的技术选型
+
+如果确定要做 (b)，「检测用户在任务栏上点了右键」有三条**非注入**路线：
+
+| 方案 | 原理 | 优点 | 风险 |
+|---|---|---|---|
+| **B1. `WH_MOUSE_LL` 全局低级鼠标钩子** | 钩住所有鼠标事件，判断坐标是否落在 `Shell_TrayWnd` 矩形内 → **吞掉事件**并弹自己的菜单 | 文档化；能完全接管交互 | 全局输入钩子（AV 敏感）；回调**必须极快**（超时默认 300ms `LowLevelHooksTimeout`，卡住会**冻结全系统鼠标**）；需常驻消息循环；无法只针对单个窗口，只能靠坐标自己过滤 |
+| ~~**B2. `SetWinEventHook(EVENT_SYSTEM_MENUPOPUPSTART)`**~~ | 系统弹出**经典**菜单时收到通知 | — | ❌ **S3 实测已排除**，见下 |
+| **B3. UI Automation 事件订阅** | 订阅任务栏 structure-changed 事件，识别菜单元素 | 文档化 | 重；**无法吞掉原菜单**，只能事后替换（会闪一下）；权限受限时读不到（本机实测 UIA 拿不到 `Shell_TrayWnd`） |
+| **B2′. `SetWinEventHook(EVENT_OBJECT_SHOW)` + 窗口类过滤** | 菜单窗口出现时收到通知 → 判断是不是任务栏的 → 关掉它、弹自己的 | **文档化、out-of-context、不吞输入** | 需按进程过滤（`Xaml_WindowedPopupClass` 也被其他 XAML 应用使用）；原菜单会**闪现一瞬** |
+
+#### ✅ Spike S3 结果（2026-10-05，本机 26H2 build 26300.9457 实测）
+
+**结论：B2 死了，但实验捞到了 B2′。**
+
+实验设计：同一进程内挂 `EVENT_SYSTEM_MENUSTART/END`、`EVENT_SYSTEM_MENUPOPUPSTART/END`、
+`EVENT_OBJECT_SHOW`，做「对照 + 实验」两阶段，并用截图确认动作真的生效。
+
+| 阶段 | 动作 | 结果 |
+|---|---|---|
+| **A（对照）** | `Alt+Space` 打开窗口系统菜单（经典 Win32 菜单） | ✅ 出现 `#32768` 窗口（rect 0,59–446,610），且 **`EVENT_SYSTEM_MENUSTART` 触发** → **钩子本身工作正常** |
+| **B（实验）** | 模拟右键点击任务栏空白处 (1364,1564) | ✅ 菜单**确实弹出**（截图 `s3_B_taskbar_menu.png` 可见「任务管理器 / 任务栏设置」，前台窗口变为 `Shell_TrayWnd`）<br>❌ **`EVENT_SYSTEM_MENU*` / `MENUPOPUP*` 一条都没触发** |
+
+**原因**：Win11 任务栏菜单不是经典 `#32768` 菜单，而是一个 **XAML 弹出窗口**。
+`EVENT_SYSTEM_MENU*` 这一族事件只覆盖经典 Win32 菜单。
+
+**⭐ 但实验捞到了关键情报：这个菜单是一个真实存在的 HWND**
+
+```
+t=4.65s  EVENT_OBJECT_SHOW  cls='Xaml_WindowedPopupClass'  text='主机弹出窗口'  rect=(0,0,0,0)
+```
+
+**B2 的架构是对的，只是事件选错了。** 换成 `EVENT_OBJECT_SHOW` 并按窗口类过滤，
+就能拿到和 B2 一样干净的方案 → 这就是 **B2′**。
+
+#### B2′ 的实现要点（均由 S3 实测得出）
+
+1. 挂 `SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, NULL, cb, 0, 0, WINEVENT_OUTOFCONTEXT)`
+2. 回调里先判 `GetClassNameW(hwnd) == "Xaml_WindowedPopupClass"`
+3. ⚠️ **不要用窗口位置过滤** —— 实测该窗口在 `EVENT_OBJECT_SHOW` 时刻 rect 是 `(0,0,0,0)`，
+   XAML 弹窗是「先显示、后定位」。要么延后几十毫秒再取位置，要么改用**所属进程过滤**：
+   `GetWindowThreadProcessId` 取 PID → 比对 `explorer.exe`
+4. ⚠️ **不要用窗口标题过滤** —— 标题 `主机弹出窗口` 是**本地化字符串**，换语言即失效
+5. ⚠️ `Xaml_WindowedPopupClass` 也是其他 WinUI/XAML 应用弹窗的类名 → **必须按进程过滤**
+6. 确认是任务栏菜单后：关掉它（发 `Esc` 或 `WM_CLOSE`），再弹自己的菜单
+
+**修订后的建议顺序：先做 B2′，不行再退 B1。** B1（全局鼠标钩子）仍是「确定能行但代价明确」的兜底。
+
+> **下一步 Spike S3′**：写 B2′ 的最小验证 —— 挂 `EVENT_OBJECT_SHOW` + 类名/进程过滤，
+> 确认能稳定捕获任务栏菜单，且不误伤其他 XAML 弹窗。
+
+---
+
+## 7. 核心机制四：皮肤引擎
+
+### 7.1 分层
+
+皮肤**只描述外观，不描述行为**：
+
+```
+SkinDescriptor (元数据: 名称/作者/适用DPI)
+    ├─ Metrics   : 高度、内边距、圆角、字号、图标尺寸
+    ├─ Brushes   : 背景/悬停/按下/边框/文字
+    ├─ Assets    : 位图素材（9-slice）
+    └─ Templates : ControlTemplate（可选，给需要特殊结构的皮肤）
+```
+
+### 7.2 皮肤格式：XAML `ResourceDictionary`
+
+**直接沿用 RetroBar 的做法**（已验证可行）：皮肤是 `ResourceDictionary`，放在 `Skins/` 目录，用户可自行添加。
+
+优点：
+- 非程序员也能改（这是作品集里很好的叙事：「社区可以贡献皮肤」）
+- 热重载容易（改完 XAML 不用重编译）
+- 有现成参考实现
+
+皮肤清单（按实现顺序）：
+
+| 皮肤 | 难度 | 备注 |
+|---|---|---|
+| Win10 扁平 | ★ | 先做这个，最简单，也是用户最想要的 |
+| Win7 Aero | ★★★ | 需要玻璃效果，见 §7.3 |
+| Win8 Metro | ★★ | 扁平但配色不同，成本低 |
+| XP Luna | ★★★ | 圆角渐变 + 位图，需要 9-slice |
+
+### 7.3 Aero 玻璃 —— 一个真实的坑
+
+Win7 的 Aero 玻璃用 `DwmEnableBlurBehindWindow`。**这个 API 从 Windows 8 起就失效了**（系统仍返回成功，但什么都不做）。
+
+现代可行的替代：
+
+| 方案 | 状态 | 评价 |
+|---|---|---|
+| `DWMWA_SYSTEMBACKDROP_TYPE`（Mica / Acrylic / Tabbed） | **文档化**，Win11 22H2+ | ✅ 首选，但效果是 Mica 不是 Aero |
+| `SetWindowCompositionAttribute` | **未文档化** | 能做出接近 Aero 的模糊，但要签名匹配 → 会被 Windows 更新搞坏 |
+| 自己画静态渐变 + 半透明 | 文档化 | 最稳，但没真模糊，视觉上差一截 |
+
+**决策：Win7 Aero 皮肤先用 `DWMWA_SYSTEMBACKDROP_TYPE` + 静态渐变模拟。** 不引入未文档化 API —— 这是本项目的核心原则，皮肤不能破例。
+
+---
+
+## 8. 多显示器与 DPI
+
+### 8.1 DPI
+
+- **必须声明 Per-Monitor V2**：`app.manifest` 里
+  ```xml
+  <dpiAwareness>PerMonitorV2</dpiAwareness>
+  <dpiAware>true/pm</dpiAware>
+  ```
+- 处理 `WM_DPICHANGED`：用 `lParam` 给出的建议矩形（suggested rect）调整窗口，**不要自己按新 DPI 重算**
+- 皮肤资源按 DPI 变体加载
+
+> 用户当前环境：**2560×1600 @ 150% 缩放**（实测任务栏逻辑尺寸 1707×1067）。这是真实测试场，但**混合 DPI（150% + 100% 外接屏）是经典雷区，必须专门测。**
+
+### 8.2 多显示器
+
+- 用 `EnumDisplayMonitors` / `GetMonitorInfo`，**不要用 `System.Windows.Forms.Screen`**（WPF 项目里引 WinForms 只为这个不值得）
+- 关键区分：
+  - `rcMonitor` = 整块屏幕
+  - `rcWork` = **扣掉任务栏和所有 app bar 之后的可用区** ← 定位时用这个
+- 每屏一个实例还是一个实例跨屏？**建议每屏一个 AppBar**（`ABM_SETAUTOHIDEBAREX` 支持指定显示器）
+- 监听 `WM_DISPLAYCHANGE` 重建
+- ⚠️ 注意：副屏的任务栏是 `Shell_SecondaryTrayWnd`，`ABM_GETTASKBARPOS` **不返回它**（用户当前环境实测没有副屏任务栏）
+
+---
+
+## 9. 配置
+
+`%APPDATA%\TaskbarExtras\config.json`（`System.Text.Json`，带 schema 版本号便于将来迁移）
+
+```jsonc
+{
+  "schemaVersion": 1,
+  "skin": "win10-flat",
+  "edge": "bottom",
+  "monitor": "primary",
+  "autoHide": false,
+  "items": [
+    { "action": "show-desktop",  "label": "显示桌面" },
+    { "action": "task-manager",  "label": "任务管理器" }
+  ]
+}
+```
+
+设计要点：`items` 是数组且只引用 `action` 的 id → 用户加按钮不用改代码；`schemaVersion` 让将来的破坏性变更可迁移。
+
+---
+
+## 10. 风险清单
+
+| # | 风险 | 影响 | 缓解 |
+|---|---|---|---|
+| **R1** | **AppBar 与任务栏共存行为未知**（§4.3） | 🔴 决定 UI 方案可行性 | **Spike S1 先行，半天**。不通过则退回悬浮方案 |
+| **R2** | 任务栏命令 ID 419/416 在 26H2 可能失效（§5.1） | 🟡 显示桌面需换实现 | Spike S2；不行就靠 `MinimizeAll`/`UndoMinimizeALL` |
+| **R3** | Aero 玻璃无文档化 API（§7.3） | 🟡 Win7 皮肤效果打折 | 用 Mica 模拟，不碰未文档化 API |
+| **R4** | 「桌面当前是否可见」无法可靠查询（§5.1） | 🟡 toggle 语义可能反了 | 调研；退路：改用两个明确动作（最小化全部 / 还原全部）而非一个 toggle |
+| **R5** | 混合 DPI 多屏 | 🟡 布局错乱 | 早期就用双屏测；manifest 必须 PerMonitorV2 |
+| **R6** | 皮肤素材版权（微软 Luna / Aero 原始位图） | 🟠 法律 | **自己重画或用社区授权素材**，绝不打包含微软位图的包 |
+| **R7** | 与 StartAllBack / ExplorerPatcher 冲突 | 🟡 行为诡异 | 启动时检测这两个的注册表键并提示用户 |
+| **R8** | 无代码签名 → Smart App Control 拦截 | 🟢 低 | 用户环境已关（`VerifiedAndReputablePolicyState=0`）；README 说明 |
+| **R9** | 环境缺 .NET SDK | 🟢 低 | 用 scoop 装（用户级免管理员） |
+| **R10** | 当前只有单显示器 | 🟡 测不了多屏 | 用模拟/虚拟机，或借外接屏 |
+| **R11** | (b) 方案用全局鼠标钩子 → AV 误报 / 钩子卡死冻结全系统鼠标（§6.4 B1） | 🟠 中 | 优先走 B2（`EVENT_SYSTEM_MENUPOPUPSTART`）；B1 仅作兜底且默认关闭 |
+| **R12** | (b) 方案依赖 `Shell_TrayWnd` 矩形做坐标判定 | 🟡 中 | 任务栏自动隐藏/多屏/DPI 变化时要重新取矩形；用 `ABM_GETTASKBARPOS` 而非硬编码 |
+
+---
+
+## 11. 里程碑
+
+| 里程碑 | 内容 | 出口标准 |
+|---|---|---|
+| **M0** | Spike S1 + S2 | 明确 AppBar 共存行为与 419 命令可用性，**据此锁定 §4.4 选型** |
+| **M1** | 可运行骨架（**已按 S1 结论修订形态**） | 托盘图标 + 自绘 Win10 风格菜单，7 项动作全部可用。**从托盘打开为必达**；**B2′ 任务栏右键触发为增强**（若 S3′ 不通过则降级，不影响交付） |
+| **M2** | 配置化 | JSON 配置 + 设置界面，用户能自己加按钮 |
+| **M3** | 自绘菜单 | Win10 风格完整菜单（含 5 个窗口排布命令） |
+| **M4** | 皮肤引擎 | 抽象出皮肤接口 + Win10 皮肤 + Win7 Aero 皮肤 |
+| **M5** | 发布 | 自包含单文件发布 + README + GitHub Actions 构建 + LICENSE |
+
+**M1 是心理关口** —— 能跑起来就说明方向对了。
+
+---
+
+## 12. 仓库结构
+
+```
+TaskbarExtras/
+├─ .github/workflows/build.yml
+├─ docs/
+│  ├─ DESIGN.md            ← 本文档
+│  └─ spikes/              ← S1/S2 的结论记录
+├─ src/
+│  ├─ TaskbarExtras.App/       WPF 宿主、托盘、设置窗口
+│  ├─ TaskbarExtras.Shell/     AppBar、窗口枚举、COM 互操作  ← 唯一的 P/Invoke 层
+│  ├─ TaskbarExtras.Actions/   动作注册表与实现
+│  └─ TaskbarExtras.Skins/     皮肤引擎 + 内置皮肤 XAML
+├─ tests/TaskbarExtras.Tests/
+├─ Directory.Build.props      统一 TFM / 版本号 / 可空引用
+├─ LICENSE                    MIT
+└─ README.md                  ← 架构取舍叙事（见下）
+```
+
+**README 是作品集的门面。** 必须写清楚：
+
+> **为什么我不注入 explorer** —— 对比 StartAllBack / ExplorerPatcher 的注入式做法（每次 Windows 功能更新都可能失效，实测 3.9.16 在 26H2 上直接失效），说明本项目选择纯文档化 API 的代价与收益。
+
+这一段比多写两个功能更能体现工程判断力。
+
+---
+
+## 13. 测试策略
+
+| 层次 | 内容 |
+|---|---|
+| 单元测试 | 配置解析与迁移、动作注册表、皮肤元数据校验 |
+| 手动矩阵 | 单屏/双屏 × 100%/150%/混合 DPI × 任务栏上/下/左/右 × 任务栏自动隐藏开/关 |
+| 回归 | **每次 Windows 功能更新后跑一遍手动矩阵**（这是本项目存在意义的验证） |
+| 冲突 | 分别与 StartAllBack / ExplorerPatcher 同时安装测试 |
+
+---
+
+## 14. API 速查
+
+### 已核实为文档化
+
+- `SHAppBarMessage` / `APPBARDATA` / `ABM_*` / `ABE_*` — shellapi.h
+- `IShellDispatch`：`CascadeWindows` / `TileHorizontally` / `TileVertically` / `MinimizeAll` / `UndoMinimizeALL` / `TrayProperties` / `ShutdownWindows` / `FileRun`
+- `GetMonitorInfo`（`rcWork` vs `rcMonitor`）
+- `EnumWindows` / `SetWinEventHook` / `GetWindowLongPtr`
+- `DwmRegisterThumbnail` / `DwmUpdateThumbnailProperties`（缩略图，M2 以后）
+- `IShellItemImageFactory::GetImage`（高质量图标）
+- `DWMWA_SYSTEMBACKDROP_TYPE`（Mica / Acrylic，Win11 22H2+）
+- `LockWorkStation` / `Process.Start`
+
+### 半文档化（需实测，尽量不用）
+
+- `Shell_TrayWnd` 的 `WM_COMMAND` 419 / 416
+- `SetWindowCompositionAttribute`
+- `RegisterShellHookWindow`
+
+### 明确不用
+
+- `WH_MOUSE_LL`（除非用户显式开启 §6.1(b)）
+- 任何 DLL 注入 / API hooking
+- `DwmEnableBlurBehindWindow`（Win8 起失效）
+
+---
+
+## 附录 A：本机环境现状（2026-10-05 实测）
+
+| 项 | 值 |
+|---|---|
+| OS | Windows 11 **26H2**，build **26300.9457**，`ProductName` 仍写 "Windows 10 Home China"（Win11 已知怪癖，非篡改） |
+| 屏幕 | 2560×1600 **@ 150% 缩放**（逻辑 1707×1067） |
+| 显示器数 | 1（无 `Shell_SecondaryTrayWnd`） |
+| 任务栏 | 底边，左对齐（`TaskbarAl=0`），高度 48px（逻辑） |
+| 任务栏结构 | `Shell_TrayWnd` → `Windows.UI.Composition.DesktopWindowContentBridge`（XAML 合成）+ `TrayNotifyWnd` + `ReBarWindow32` + `MSTaskSwWClass` |
+| 显示桌面按钮 | **不存在**（无 `TrayShowDesktopButtonWnd`；`TaskbarSd=1` 写入后重启 explorer 仍无效） |
+| Aero Peek | 已关（`DisablePreviewDesktop=1`） |
+| .NET | **无 SDK**；运行时 WindowsDesktop.App 6.0.36 / 8.0.31 / 9.0.20 / 10.0.12 |
+| 工具链 | git 2.55.0 ✅ / scoop ✅ / winget 1.29.380 ✅ / VS Code ✅ / **无 gh CLI** |
+| Smart App Control | **已关闭**（`VerifiedAndReputablePolicyState=0`） |
+| 冲突软件 | StartAllBack 3.9.16 已安装但 `Disabled=1`（DLL 仍注入 explorer，**装本项目前须卸载**） |
+| GitHub | `potato1778` |
+
+---
+
+## 附录 B：待决策项
+
+1. **项目名**（`TaskbarExtras` / `ShelfBar` / `RetroShelf`）
+2. 先做 RetroBar 的 Win7 皮肤（§2 建议的顺序），还是直接自研？
+3. §6.1 的 (b) 全局钩子方案要不要做（默认关闭的可选项）
+4. 许可证：MIT 还是 Apache-2.0（若要参考 RetroBar 的皮肤文件格式，注意其 Apache-2.0 的 NOTICE 要求）

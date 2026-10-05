@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TaskbarExtras.Actions/TaskbarExtras.Actions.csproj" />
+    <Project Path="src/TaskbarExtras.App/TaskbarExtras.App.csproj" />
+    <Project Path="src/TaskbarExtras.Shell/TaskbarExtras.Shell.csproj" />
+  </Folder>
+</Solution>

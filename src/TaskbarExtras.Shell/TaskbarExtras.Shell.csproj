@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    TaskbarExtras.Shell
+
+    THE ONLY PROJECT THAT MAY CONTAIN P/Invoke OR COM INTEROP.
+    See docs/DESIGN.md §3.1 — keeping every native call in one place means that
+    when (not if) a Windows API changes, the blast radius is one project.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>TaskbarExtras.Shell</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+</Project>
