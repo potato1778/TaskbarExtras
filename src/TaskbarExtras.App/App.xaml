@@ -5,8 +5,10 @@
   <Application.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
-        <!-- Swapping this one line is how a different skin gets applied. -->
-        <ResourceDictionary Source="Skins/Win10Flat.xaml" />
+        <!-- Swapping this one line is how a different skin gets applied. The skin argument
+             picks the file before the menu window is constructed, because StaticResource
+             resolves at load time. -->
+        <ResourceDictionary Source="Skins/Win11.xaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Application.Resources>

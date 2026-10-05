@@ -34,12 +34,11 @@ public partial class ClassicMenuWindow : Window
     }
 
     /// <summary>
-    /// Show the menu anchored to a point on the taskbar.
+    /// Show the menu anchored to a point, the way a native Win32 menu appears.
     /// </summary>
-    /// <param name="anchorX">Physical pixel X the menu should be centred on.</param>
-    /// <param name="anchorY">Unused today; kept so callers do not have to change later.</param>
-    /// <param name="taskbar">Physical rect of the taskbar, so the menu can sit right above it.</param>
-    public void ShowAtPhysical(int anchorX, int anchorY, ScreenRect? taskbar)
+    /// <param name="anchorX">Physical pixel X of the click — the menu's left edge lands here.</param>
+    /// <param name="anchorY">Physical pixel Y of the click — the menu's bottom edge lands here.</param>
+    public void ShowAtPhysical(int anchorX, int anchorY)
     {
         // Re-evaluate CanExecute() every time the menu opens — "层叠窗口" is meaningless with
         // fewer than two windows, and that changes from second to second.
@@ -48,9 +47,8 @@ public partial class ClassicMenuWindow : Window
         // ---- Gotcha #1: a never-shown Window reports ActualWidth/Height == 0. ----
         // SizeToContent only resolves during a real layout pass, so UpdateLayout() on a window
         // that has not been shown tells us nothing. Show it fully transparent first, let layout
-        // run, then position it and reveal. Measured without this fix: the menu landed at
-        // (anchorX, taskbar.Top) — 245 px hanging off the bottom of the screen — because both
-        // dimensions were treated as zero.
+        // run, then position it and reveal. Measured without this fix: the menu landed 245 px off
+        // the bottom of the screen, because both dimensions were treated as zero.
         Opacity = 0;
         if (!IsVisible) Show();
         UpdateLayout();
@@ -58,25 +56,44 @@ public partial class ClassicMenuWindow : Window
         // ---- Gotcha #2: the DPI conversion. ----
         // Everything the shell gave us is PHYSICAL pixels. WPF's Left/Top are DIPs. On a 150%
         // display those differ by 1.5x, so an unconverted value puts the menu 50% too far from
-        // the corner.
+        // the click.
         var dpi = VisualTreeHelper.GetDpi(this);
-        var menuWidthDip = ActualWidth > 0 ? ActualWidth : 240;
-        var menuHeightDip = ActualHeight > 0 ? ActualHeight : 320;
+        var windowWidthDip = ActualWidth > 0 ? ActualWidth : 240;
+        var windowHeightDip = ActualHeight > 0 ? ActualHeight : 320;
 
-        var work = TaskbarInfo.TryGetWorkArea(out var w) ? w : new ScreenRect(0, 0, 1920, 1080);
+        // The window is larger than the visible card: the skin puts a transparent margin around
+        // the border so the drop shadow has somewhere to render. Positioning has to compensate,
+        // or the menu lands offset from the cursor by exactly that margin.
+        var shadowDip = TryFindResource("MenuBorderMargin") is Thickness margin ? margin.Left : 8;
 
-        // Bottom-aligned just above the taskbar, horizontally centred on the cursor.
-        var menuHeightPx = menuHeightDip * dpi.DpiScaleY;
-        var topPhysical = taskbar is { } tb && tb.Height > 0
-            ? tb.Top - menuHeightPx
-            : anchorY - menuHeightPx;
-        var leftPhysical = anchorX - (menuWidthDip * dpi.DpiScaleX) / 2.0;
+        var windowWidthPx = windowWidthDip * dpi.DpiScaleX;
+        var windowHeightPx = windowHeightDip * dpi.DpiScaleY;
+        var shadowX = shadowDip * dpi.DpiScaleX;
+        var shadowY = shadowDip * dpi.DpiScaleY;
 
-        // Keep it inside the work area.
-        var minLeftDip = work.Left / dpi.DpiScaleX;
-        var maxLeftDip = work.Right / dpi.DpiScaleX - menuWidthDip;
-        Left = Math.Clamp(leftPhysical / dpi.DpiScaleX, minLeftDip, Math.Max(minLeftDip, maxLeftDip));
-        Top = Math.Max(work.Top / dpi.DpiScaleY, topPhysical / dpi.DpiScaleY);
+        // Native menus are placed with their top-left at the cursor and then nudged to stay on
+        // screen. For a click on a bottom taskbar that puts the visible bottom edge on the click
+        // and the visible left edge on the click — which is why the real menu overlaps the
+        // taskbar slightly. The first version centred the menu on the cursor and parked it
+        // strictly above the taskbar, and it read as "not the real menu".
+        var leftPhysical = anchorX - shadowX;
+        var topPhysical = anchorY + shadowY - windowHeightPx;
+
+        // Keep the VISIBLE card on screen, hence the shadow compensation. Note this clamps to the
+        // MONITOR, not the work area: a menu is allowed to overlap the taskbar — the shell's own
+        // menu does exactly that — and clamping to the work area pushes the menu up off the click.
+        var bounds = TaskbarInfo.TryGetMonitorRect(out var monitor)
+            ? monitor
+            : new ScreenRect(0, 0, 1920, 1080);
+        leftPhysical = Math.Clamp(leftPhysical,
+            bounds.Left - shadowX,
+            Math.Max(bounds.Left - shadowX, bounds.Right - windowWidthPx + shadowX));
+        topPhysical = Math.Clamp(topPhysical,
+            bounds.Top - shadowY,
+            Math.Max(bounds.Top - shadowY, bounds.Bottom - windowHeightPx + shadowY));
+
+        Left = leftPhysical / dpi.DpiScaleX;
+        Top = topPhysical / dpi.DpiScaleY;
 
         Opacity = 1;
         Activate();

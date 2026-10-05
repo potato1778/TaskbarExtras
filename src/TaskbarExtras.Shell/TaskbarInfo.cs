@@ -117,17 +117,47 @@ public static class TaskbarInfo
         return blocked is null;
     }
 
-    /// <summary>The work area of the monitor the taskbar lives on (excludes taskbar and all other appbars).</summary>
+    private static bool TryGetMonitorInfo(out NativeMethods.MONITORINFO info)
+    {
+        info = default;
+        var handle = Handle;
+        if (handle == IntPtr.Zero)
+            handle = NativeMethods.MonitorFromWindow(IntPtr.Zero, NativeMethods.MONITOR_DEFAULTTOPRIMARY);
+        var monitor = NativeMethods.MonitorFromWindow(handle, NativeMethods.MONITOR_DEFAULTTOPRIMARY);
+        if (monitor == IntPtr.Zero) return false;
+        info = new NativeMethods.MONITORINFO
+        {
+            cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>()
+        };
+        return NativeMethods.GetMonitorInfo(monitor, ref info);
+    }
+
+    /// <summary>
+    /// Work area of the taskbar's monitor — the screen minus the taskbar and every other appbar.
+    /// </summary>
     public static bool TryGetWorkArea(out ScreenRect work)
     {
         work = default;
-        var h = Handle;
-        if (h == IntPtr.Zero) h = NativeMethods.MonitorFromWindow(IntPtr.Zero, NativeMethods.MONITOR_DEFAULTTOPRIMARY);
-        var mon = NativeMethods.MonitorFromWindow(h, NativeMethods.MONITOR_DEFAULTTOPRIMARY);
-        if (mon == IntPtr.Zero) return false;
-        var mi = new NativeMethods.MONITORINFO { cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>() };
-        if (!NativeMethods.GetMonitorInfo(mon, ref mi)) return false;
-        work = new ScreenRect(mi.rcWork.Left, mi.rcWork.Top, mi.rcWork.Right, mi.rcWork.Bottom);
+        if (!TryGetMonitorInfo(out var info)) return false;
+        work = new ScreenRect(info.rcWork.Left, info.rcWork.Top, info.rcWork.Right, info.rcWork.Bottom);
+        return true;
+    }
+
+    /// <summary>
+    /// Full rect of the taskbar's monitor.
+    ///
+    /// <para>
+    /// Use this, <b>not</b> <see cref="TryGetWorkArea"/>, when clamping a popup menu. A menu is
+    /// allowed to overlap the taskbar — that is exactly what the shell's own menu does — so
+    /// clamping to the work area pushes the menu up and away from the click point. Measured:
+    /// clamping to rcWork moved the menu 33 px off the click.
+    /// </para>
+    /// </summary>
+    public static bool TryGetMonitorRect(out ScreenRect monitor)
+    {
+        monitor = default;
+        if (!TryGetMonitorInfo(out var info)) return false;
+        monitor = new ScreenRect(info.rcMonitor.Left, info.rcMonitor.Top, info.rcMonitor.Right, info.rcMonitor.Bottom);
         return true;
     }
 }

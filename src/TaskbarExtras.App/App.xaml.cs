@@ -55,6 +55,9 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // Must happen before the menu window exists — see ApplySkinArgument.
+        ApplySkinArgument(e.Args);
+
         _menu = new ClassicMenuWindow(Registry)
         {
             // App-level rows live here rather than in the action registry: quitting is not
@@ -75,6 +78,24 @@ public partial class App : System.Windows.Application
         _hook.RightClickSwallowed += OnRightClickSwallowed;
         _hook.ButtonDown += OnButtonDown;
         _hook.Diagnostic += (_, message) => Log.Write($"[hook] {message}");
+
+        if (e.Args.Any(a => a is "--preview" or "-p"))
+        {
+            // Show the menu once, anchored to the middle of the taskbar, and quit when it is
+            // dismissed. Lets you look at a skin without installing anything, and makes
+            // screenshots deterministic — no synthesised clicks involved.
+            _hook.Enabled = false;   // dismissal still works, right-click swallowing does not
+            _hook.Start();
+            _menu.IsVisibleChanged += (_, _) => { if (!_menu.IsVisible) Shutdown(); };
+
+            if (!TaskbarInfo.TryGetRect(out var bar)) bar = new ScreenRect(0, 1528, 2560, 1600);
+            var anchorX = bar.Left + bar.Width / 2;
+            var anchorY = bar.Top + bar.Height / 2;
+            Log.Write($"preview 模式：在 ({anchorX},{anchorY}) 显示菜单");
+            _menu.ShowAtPhysical(anchorX, anchorY);
+            return;
+        }
+
         var hookInstalled = _hook.Start();
 
         _tray = new TrayIcon();
@@ -98,11 +119,7 @@ public partial class App : System.Windows.Application
     private void OnRightClickSwallowed(object? sender, TaskbarRightClickEventArgs e)
     {
         Log.Write($"拦截任务栏右键 ({e.X},{e.Y}) 注入={e.Injected}");
-        Dispatcher.BeginInvoke(new Action(() =>
-        {
-            TaskbarInfo.TryGetRect(out var taskbar);
-            _menu?.ShowAtPhysical(e.X, e.Y, taskbar);
-        }));
+        Dispatcher.BeginInvoke(new Action(() => _menu?.ShowAtPhysical(e.X, e.Y)));
     }
 
     /// <summary>
@@ -127,9 +144,8 @@ public partial class App : System.Windows.Application
     {
         if (_menu is null) return;
         TaskbarInfo.TryGetCursorPos(out var x, out var y);
-        TaskbarInfo.TryGetRect(out var taskbar);
         Log.Write($"弹出自绘菜单（托盘）光标=({x},{y})");
-        _menu.ShowAtPhysical(x, y, taskbar);
+        _menu.ShowAtPhysical(x, y);
     }
 
     private void OnQuitSignalled(object? state, bool timedOut)
@@ -164,6 +180,8 @@ public partial class App : System.Windows.Application
         Console.WriteLine("  TaskbarExtras.exe                  启动（出现托盘图标）");
         Console.WriteLine("  TaskbarExtras.exe --quit           让正在运行的实例退出");
         Console.WriteLine("  TaskbarExtras.exe --lang zh|en     强制界面语言");
+        Console.WriteLine("  TaskbarExtras.exe --skin win11|win10  菜单外观（默认 win11）");
+        Console.WriteLine("  TaskbarExtras.exe --preview        只显示一次菜单，用来预览皮肤");
         Console.WriteLine("  TaskbarExtras.exe --help           显示这段说明");
         Console.WriteLine();
         Console.WriteLine("退出方式（任选其一）：");
@@ -182,6 +200,47 @@ public partial class App : System.Windows.Application
                 Localization.TrySetLanguage(args[i + 1]);
                 return;
             }
+        }
+    }
+
+    /// <summary>
+    /// Swaps the merged skin dictionary. <b>Must run before the menu window is constructed</b>:
+    /// the menu's XAML binds to the skin with <c>StaticResource</c>, which resolves once at load
+    /// time, so a swap afterwards would silently do nothing. (Supporting a live switch would mean
+    /// moving every brush reference to <c>DynamicResource</c>.)
+    /// </summary>
+    private static void ApplySkinArgument(string[] args)
+    {
+        var requested = "win11";
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] is "--skin" or "-s") requested = args[i + 1].Trim().ToLowerInvariant();
+        }
+
+        var fileName = requested switch
+        {
+            "win10" => "Win10.xaml",
+            "win11" => "Win11.xaml",
+            _ => null
+        };
+
+        if (fileName is null)
+        {
+            Log.Write($"未知皮肤 '{requested}'，回退到 win11");
+            fileName = "Win11.xaml";
+        }
+
+        try
+        {
+            var dictionary = new ResourceDictionary { Source = new Uri($"Skins/{fileName}", UriKind.Relative) };
+            Current.Resources.MergedDictionaries.Clear();
+            Current.Resources.MergedDictionaries.Add(dictionary);
+            Log.Write($"皮肤 = {fileName}");
+        }
+        catch (Exception ex)
+        {
+            // Leave the dictionary from App.xaml in place rather than starting with no skin at all.
+            Log.Write($"皮肤 '{fileName}' 加载失败，沿用默认: {ex.Message}");
         }
     }
 
