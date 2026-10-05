@@ -41,17 +41,6 @@ public static class TaskbarInfo
     public static IntPtr SecondaryHandle => NativeMethods.FindWindow(SecondaryTaskbarClass, null);
 
     /// <summary>
-    /// True when the mouse cursor is currently over the taskbar. Used as the decisive
-    /// filter for <see cref="TaskbarMenuWatcher"/>: a XAML popup owned by explorer.exe
-    /// appearing while the cursor sits on the taskbar is, in practice, the taskbar menu.
-    /// </summary>
-    public static bool IsCursorOverTaskbar(int tolerance = 4)
-    {
-        if (!NativeMethods.GetCursorPos(out var pt)) return false;
-        return TryGetRect(out var rect) && rect.Contains(pt.X, pt.Y, tolerance);
-    }
-
-    /// <summary>
     /// Mouse cursor position in PHYSICAL pixels. Exposed here rather than letting callers
     /// reach for WinForms' Cursor.Position, so that every coordinate in the app comes from
     /// the same DPI-aware source.
@@ -111,15 +100,6 @@ public static class TaskbarInfo
 
         return !blocked;
     }
-
-    /// <summary>
-    /// True when a specific point is over the taskbar. Preferred over
-    /// <see cref="IsCursorOverTaskbar"/> when the coordinates come from a mouse hook, because
-    /// those are the coordinates of the click being processed, not "wherever the cursor is by
-    /// the time we get round to asking".
-    /// </summary>
-    public static bool IsPointOverTaskbar(int x, int y, int tolerance = 2) =>
-        TryGetRect(out var rect) && rect.Contains(x, y, tolerance);
 
     /// <summary>The work area of the monitor the taskbar lives on (excludes taskbar and all other appbars).</summary>
     public static bool TryGetWorkArea(out ScreenRect work)

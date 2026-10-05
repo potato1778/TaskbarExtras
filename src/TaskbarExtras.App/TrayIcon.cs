@@ -11,8 +11,8 @@ namespace TaskbarExtras.App;
 /// Tray presence.
 ///
 /// <para>
-/// This is the guaranteed entry point: the taskbar-menu interception (see
-/// <see cref="Shell.TaskbarMenuWatcher"/>) is the headline feature, but if it ever fails the
+/// This is the guaranteed entry point: the taskbar right-click interception (see
+/// <see cref="TaskbarExtras.Shell.TaskbarRightClickHook"/>) is the headline feature, but if it ever fails the
 /// user must still be able to reach the menu and — more importantly — still be able to quit.
 /// A tray icon with an explicit Exit item is what makes that true.
 /// </para>
