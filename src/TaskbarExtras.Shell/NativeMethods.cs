@@ -228,6 +228,20 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     internal static extern IntPtr GetForegroundWindow();
 
+    // ---------------------------------------------------------------- Console
+
+    internal const int ATTACH_PARENT_PROCESS = -1;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool AttachConsole(int dwProcessId);
+
+    // ---------------------------------------------------------------- Icons
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool DestroyIcon(IntPtr hIcon);
+
     // ---------------------------------------------------------------- DPI
 
     internal const int DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4;

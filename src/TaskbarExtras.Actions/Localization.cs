@@ -31,6 +31,11 @@ public static class Localization
         ["tray.open-menu"]            = ("Open menu",              "打开菜单"),
         ["tray.open-log"]             = ("Open log",               "打开日志"),
         ["tray.exit"]                 = ("Exit",                   "退出"),
+
+        // Shown at the bottom of the replacement menu. Windows 10 had no such item, but this
+        // app has no main window and its tray icon is usually hidden behind the overflow
+        // chevron — so without this there is no discoverable way to quit.
+        ["menu.exit"]                 = ("Exit TaskbarExtras",     "退出 TaskbarExtras"),
     };
 
     public static Language Current { get; private set; } = DetectFromSystem();

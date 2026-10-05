@@ -185,14 +185,24 @@ dotnet build TaskbarExtras.slnx -c Release
 
 Needs the .NET SDK. Targets `net9.0-windows`. **No administrator rights** — the manifest declares `asInvoker` and nothing here needs elevation.
 
-### Language
-
-The UI follows the OS UI language (English or Chinese). Force one with:
+### Command line
 
 ```
-TaskbarExtras.exe --lang zh
-TaskbarExtras.exe --lang en
+TaskbarExtras.exe                  start (a tray icon appears)
+TaskbarExtras.exe --quit           ask a running instance to stop
+TaskbarExtras.exe --lang zh|en     force the UI language
+TaskbarExtras.exe --help           print this
 ```
+
+The UI follows the OS UI language (English or Chinese) unless `--lang` says otherwise.
+
+### Quitting
+
+There is **no main window**, so there is nothing to close — and the first version got this wrong. It shipped with only a tray icon, and Windows 11 files new tray icons into the overflow flyout behind the `^` chevron, so there was no discoverable way out at all. Three ways now:
+
+1. **Right-click the taskbar → Exit TaskbarExtras.** The last row of the menu this app adds.
+2. **Right-click the tray icon → Exit.** The icon is a deliberate dark square with three bars rather than the generic application glyph, precisely so it can be told apart inside the overflow.
+3. **`TaskbarExtras.exe --quit`.** Signals a running instance over a named event, so it works even if the icon is buried. Prints whether an instance was actually found.
 
 ### ⚠️ "You must install or update .NET to run this application"
 

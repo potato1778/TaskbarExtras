@@ -20,6 +20,13 @@ public partial class ClassicMenuWindow : Window
 {
     private readonly ActionRegistry _registry;
 
+    /// <summary>
+    /// Extra rows appended at the bottom, supplied by the host. A factory rather than a list, so
+    /// the rows are rebuilt on every open — which keeps their labels in step with the language
+    /// and leaves room for dynamic content later.
+    /// </summary>
+    public Func<IReadOnlyList<MenuItemViewModel>>? ExtraItemsFactory { get; set; }
+
     public ClassicMenuWindow(ActionRegistry registry)
     {
         _registry = registry;
@@ -80,17 +87,25 @@ public partial class ClassicMenuWindow : Window
         var items = new List<MenuItemViewModel>();
         foreach (var action in _registry.All)
         {
-            // A separator before the two "settings" style entries, mirroring the Windows 10 menu.
+            // A separator before the "settings" style entry, mirroring the Windows 10 menu.
             if (action.Id == "taskbar-settings") items.Add(MenuItemViewModel.Separator());
             items.Add(MenuItemViewModel.From(action));
         }
+
+        var extras = ExtraItemsFactory?.Invoke();
+        if (extras is { Count: > 0 })
+        {
+            items.Add(MenuItemViewModel.Separator());
+            items.AddRange(extras);
+        }
+
         ItemsHost.ItemsSource = items;
     }
 
     private void OnItemMouseUp(object sender, MouseButtonEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: MenuItemViewModel vm }) return;
-        if (vm.Action is null || !vm.IsEnabled) return;
+        if (!vm.IsEnabled) return;
 
         Hide();
         // Run after the menu is gone so the action's window changes are not fighting our own
@@ -99,11 +114,12 @@ public partial class ClassicMenuWindow : Window
         {
             try
             {
-                vm.Action.Execute();
+                if (vm.Invoke is { } invoke) invoke();
+                else if (vm.Action is { } action) action.Execute();
             }
             catch (Exception ex)
             {
-                Log.Write($"动作 {vm.Action.Id} 执行失败: {ex.Message}");
+                Log.Write($"菜单项执行失败: {ex.Message}");
             }
         }));
     }

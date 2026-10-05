@@ -185,14 +185,28 @@ dotnet build TaskbarExtras.slnx -c Release
 
 需要 .NET SDK，目标框架 `net9.0-windows`。**不需要管理员权限** —— manifest 里声明的是 `asInvoker`。
 
-### 语言
-
-界面跟随系统 UI 语言（英文 / 中文）。也可以强制指定：
+### 命令行
 
 ```
-TaskbarExtras.exe --lang zh
-TaskbarExtras.exe --lang en
+TaskbarExtras.exe                  启动（出现托盘图标）
+TaskbarExtras.exe --quit           让正在运行的实例退出
+TaskbarExtras.exe --lang zh|en     强制界面语言
+TaskbarExtras.exe --help           显示说明
 ```
+
+界面默认跟随系统 UI 语言（中文 / 英文），`--lang` 可强制指定。
+
+### 怎么退出
+
+这个程序**没有主窗口**，所以没有东西可以「关」—— 而第一版正是在这里做错了：
+只留了一个托盘图标，而 Windows 11 会把新图标塞进 `^` 折叠区，结果**根本找不到退出入口**。
+现在有三条路：
+
+1. **右键任务栏 → 「退出 TaskbarExtras」** —— 本程序加的菜单里的最后一项。
+2. **右键托盘图标 → 退出。** 图标是刻意画的深色方块加三道横杠，不是通用应用图标，
+   就是为了在折叠区里能认出来。
+3. **`TaskbarExtras.exe --quit`** —— 通过命名事件通知正在运行的实例，图标埋得再深也能用。
+   它会明确告诉你有没有找到正在运行的实例。
 
 ### ⚠️ 报「You must install or update .NET to run this application」
 
