@@ -43,6 +43,7 @@ public partial class App : System.Windows.Application
         _hook = new TaskbarRightClickHook();
         _hook.RightClickSwallowed += OnRightClickSwallowed;
         _hook.ButtonDown += OnButtonDown;
+        _hook.Diagnostic += (_, message) => Log.Write($"[hook] {message}");
         var hookInstalled = _hook.Start();
 
         _tray = new TrayIcon();

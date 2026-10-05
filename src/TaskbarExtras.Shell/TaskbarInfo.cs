@@ -78,27 +78,43 @@ public static class TaskbarInfo
     /// taskbar would kill jump lists and the Win+X menu, which would be a far worse regression
     /// than the problem being solved.
     /// </remarks>
-    public static bool IsOverEmptyTaskbarArea(int x, int y)
+    public static bool IsOverEmptyTaskbarArea(int x, int y) => IsOverEmptyTaskbarArea(x, y, out _);
+
+    /// <summary>
+    /// Same as <see cref="IsOverEmptyTaskbarArea(int,int)"/>, but reports <i>which</i> child
+    /// window blocked the point. This exists because the first version of this check returned a
+    /// bare bool, and when the hook silently stopped firing there was no way to tell whether the
+    /// point had missed the taskbar entirely or landed on a child window — both looked identical
+    /// from the outside. Diagnostics for a global hook are not optional.
+    /// </summary>
+    /// <param name="blockingClass">
+    /// Class name of the child window that owns the point, or null when nothing blocked it.
+    /// Null does <b>not</b> mean the point was over the taskbar — check
+    /// <see cref="TryGetRect"/> separately.
+    /// </param>
+    public static bool IsOverEmptyTaskbarArea(int x, int y, out string? blockingClass)
     {
+        blockingClass = null;
         if (!TryGetRect(out var taskbar) || !taskbar.Contains(x, y)) return false;
 
         var taskbarHandle = Handle;
         if (taskbarHandle == IntPtr.Zero) return true;
 
-        var blocked = false;
+        string? blocked = null;
         NativeMethods.EnumChildWindows(taskbarHandle, (child, _) =>
         {
             var className = WindowEnumerator.GetClassName(child);
             if (Array.IndexOf(InteractiveChildClasses, className) < 0) return true;
             if (WindowEnumerator.TryGetRect(child, out var rect) && rect.Contains(x, y))
             {
-                blocked = true;
+                blocked = className;
                 return false;
             }
             return true;
         }, IntPtr.Zero);
 
-        return !blocked;
+        blockingClass = blocked;
+        return blocked is null;
     }
 
     /// <summary>The work area of the monitor the taskbar lives on (excludes taskbar and all other appbars).</summary>

@@ -76,6 +76,13 @@ public sealed class TaskbarRightClickHook : IDisposable
     /// </summary>
     public event EventHandler<MouseButtonDownEventArgs>? ButtonDown;
 
+    /// <summary>
+    /// Raised on the hook thread whenever a right-click lands on the taskbar, whether we took it
+    /// or not, with the reason. Without this, "the hook did not fire" and "the hook fired but
+    /// decided not to act" are indistinguishable from the outside.
+    /// </summary>
+    public event EventHandler<string>? Diagnostic;
+
     public bool IsRunning => _hook != IntPtr.Zero;
 
     public bool Start()
@@ -123,12 +130,21 @@ public sealed class TaskbarRightClickHook : IDisposable
 
         if (!Enabled) return NativeMethods.CallNextHookEx(_hook, nCode, wParam, lParam);
 
-        // Only the right button, and only on the taskbar's empty background.
+        // Only the right button.
         if (message != NativeMethods.WM_RBUTTONDOWN && message != NativeMethods.WM_RBUTTONUP)
             return NativeMethods.CallNextHookEx(_hook, nCode, wParam, lParam);
 
-        if (!TaskbarInfo.IsOverEmptyTaskbarArea(info.pt.X, info.pt.Y))
-            return NativeMethods.CallNextHookEx(_hook, nCode, wParam, lParam);
+        // Diagnostics only for right-clicks that actually land on the taskbar, so this stays
+        // quiet in normal use.
+        var overTaskbar = TaskbarInfo.TryGetRect(out var taskbarRect)
+                          && taskbarRect.Contains(info.pt.X, info.pt.Y);
+        if (!overTaskbar) return NativeMethods.CallNextHookEx(_hook, nCode, wParam, lParam);
+
+        var overEmpty = TaskbarInfo.IsOverEmptyTaskbarArea(info.pt.X, info.pt.Y, out var blocking);
+        Diagnostic?.Invoke(this,
+            $"任务栏内右键 ({info.pt.X},{info.pt.Y}) 空白处={overEmpty} 阻挡={blocking ?? "-"}");
+
+        if (!overEmpty) return NativeMethods.CallNextHookEx(_hook, nCode, wParam, lParam);
 
         // Swallow BOTH the down and the up. Which one the shell uses to open its menu is an
         // implementation detail; eating both makes it irrelevant.
