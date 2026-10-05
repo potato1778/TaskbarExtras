@@ -19,6 +19,8 @@ On Windows 11 you get *Task Manager* and *Taskbar settings*. That's it. This pro
 └──────────────────────────┘
 ```
 
+![The restored taskbar context menu, running on Windows 11 26H2](docs/screenshot-menu.png)
+
 ---
 
 ## Why not just use StartAllBack or ExplorerPatcher?
