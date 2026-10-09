@@ -30,6 +30,7 @@
 | 堆叠显示窗口 | |
 | 并排显示窗口 | |
 | 任务栏设置 | |
+| 开机自启 | 勾选项，点一下切换 |
 | 退出 TaskbarExtras | |
 
 只有任务栏**空白处**会被拦截。右键开始按钮还是 Win+X，右键任务图标还是跳转列表，右键托盘图标还是各自的菜单 —— 这些都没动。
@@ -49,6 +50,8 @@ dotnet publish src/TaskbarExtras.App -c Release -r win-x64 --self-contained true
 ```
 TaskbarExtras.exe                     启动
 TaskbarExtras.exe --quit              让正在运行的实例退出
+TaskbarExtras.exe --autostart         看是否已设为开机自启
+TaskbarExtras.exe --autostart on|off  开 / 关开机自启
 TaskbarExtras.exe --lang zh|en        强制界面语言（默认跟随系统）
 TaskbarExtras.exe --skin win11|win10  菜单外观（默认 win11）
 TaskbarExtras.exe --preview           只显示一次菜单，用来预览皮肤
@@ -62,6 +65,23 @@ TaskbarExtras.exe --help              显示说明
 1. 右键任务栏 → 菜单最后一项「退出 TaskbarExtras」
 2. 右键托盘图标 → 退出（图标在 `^` 折叠区里，深色方块加三道横杠）
 3. `TaskbarExtras.exe --quit`
+
+## 开机自启
+
+右键任务栏，菜单里有一项「开机自启」，点一下就切换。勾上就是下次登录时自动起来。
+
+命令行也行：
+
+```bash
+TaskbarExtras.exe --autostart on
+TaskbarExtras.exe --autostart off
+```
+
+写的是 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`，用户级，不需要管理员权限。
+
+有个坑值得说：任务管理器的「启动」页可以禁用启动项，而**它不会删掉 Run 里的值**，只是在另一个地方记一笔。所以只看 Run 键会以为一切正常，实际根本不会启动。这个程序两处都看 —— 你在任务管理器里禁用了，菜单里的勾就会消失，再点一下能重新生效。
+
+顺带：如果你把 exe 挪到了别的目录，旧的注册项就指向一个不存在的地方。这种情况菜单里也显示为未勾选，点一下会重新登记当前路径。
 
 ## 皮肤
 

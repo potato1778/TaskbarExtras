@@ -30,6 +30,7 @@ Right-click the taskbar's empty background:
 | Show windows stacked | |
 | Show windows side by side | |
 | Taskbar settings | |
+| Start at sign-in | Checkable; click to toggle |
 | Exit TaskbarExtras | |
 
 Only the **empty** part of the taskbar is intercepted. Right-clicking Start still gives you Win+X, right-clicking a task button still gives you its jump list, right-clicking a tray icon still gives you its own menu. None of that is touched.
@@ -49,6 +50,8 @@ One exe comes out. Double-click it. No admin rights, no .NET install needed.
 ```
 TaskbarExtras.exe                     start
 TaskbarExtras.exe --quit              ask a running instance to stop
+TaskbarExtras.exe --autostart         report whether it starts at sign-in
+TaskbarExtras.exe --autostart on|off  turn that on or off
 TaskbarExtras.exe --lang zh|en        force the UI language (defaults to your system)
 TaskbarExtras.exe --skin win11|win10  menu appearance (defaults to win11)
 TaskbarExtras.exe --preview           show the menu once, for trying out a skin
@@ -62,6 +65,23 @@ There's no main window, so there's nothing to close. Three ways out:
 1. Right-click the taskbar → **Exit TaskbarExtras** (last row of the menu)
 2. Right-click the tray icon → Exit. It lives in the `^` overflow flyout — a dark square with three bars.
 3. `TaskbarExtras.exe --quit`
+
+## Starting at sign-in
+
+The menu has a **Start at sign-in** row. Click it to toggle; the tick shows the state.
+
+Or from the command line:
+
+```bash
+TaskbarExtras.exe --autostart on
+TaskbarExtras.exe --autostart off
+```
+
+It writes to `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` — per-user, no admin rights.
+
+One thing worth knowing: Task Manager's Startup tab can disable an entry **without deleting it**. It records that decision somewhere else entirely, so the Run key keeps looking perfectly healthy while nothing ever starts. This app reads both, which is why disabling it there makes the tick disappear, and clicking the row turns it back on for real.
+
+Related: if you move the exe, the old registration points at a path that no longer exists. That also shows as unticked, and clicking it re-registers wherever the app is now.
 
 ## Skins
 

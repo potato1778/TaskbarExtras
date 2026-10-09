@@ -32,6 +32,11 @@ public static class Localization
         ["tray.open-log"]             = ("Open log",               "打开日志"),
         ["tray.exit"]                 = ("Exit",                   "退出"),
 
+        // A checkable row, so the tick tells you the current state without opening anything else.
+        ["menu.startup"]              = ("Start at sign-in",       "开机自启"),
+        ["startup.failed"]            = ("Could not change the start-up setting:",
+                                         "无法修改开机自启设置："),
+
         // Shown at the bottom of the replacement menu. Windows 10 had no such item, but this
         // app has no main window and its tray icon is usually hidden behind the overflow
         // chevron — so without this there is no discoverable way to quit.

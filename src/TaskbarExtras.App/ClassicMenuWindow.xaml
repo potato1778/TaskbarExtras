@@ -23,9 +23,15 @@
             <Border x:Name="Row"
                     Style="{StaticResource MenuItemBorderStyle}"
                     MouseLeftButtonUp="OnItemMouseUp">
-              <TextBlock x:Name="Label"
-                         Style="{StaticResource MenuTextStyle}"
-                         Text="{Binding DisplayName}" />
+              <StackPanel Orientation="Horizontal">
+                <!-- Reserved tick column, present on every row so labels stay aligned. Width comes
+                     from the skin, like every other metric. -->
+                <TextBlock Text="{Binding CheckGlyph}"
+                           Style="{StaticResource MenuTextStyle}"
+                           Width="{StaticResource MenuTickColumnWidth}" />
+                <TextBlock Style="{StaticResource MenuTextStyle}"
+                           Text="{Binding DisplayName}" />
+              </StackPanel>
             </Border>
           </Grid>
           <DataTemplate.Triggers>

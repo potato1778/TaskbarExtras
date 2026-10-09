@@ -46,6 +46,14 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // Before the single-instance check: the setting lives in the registry, so it can be
+        // changed whether or not an instance is already running.
+        if (TryHandleAutostartArgument(e.Args))
+        {
+            Shutdown();
+            return;
+        }
+
         Log.Reset();
 
         if (!ClaimSingleInstance())
@@ -60,12 +68,17 @@ public partial class App : System.Windows.Application
 
         _menu = new ClassicMenuWindow(Registry)
         {
-            // App-level rows live here rather than in the action registry: quitting is not
-            // something the Windows 10 taskbar menu could do, so it is not a shell action —
-            // but this app has no main window, and its tray icon is usually hidden behind the
-            // overflow chevron, so without this there is no discoverable way out.
+            // App-level rows live here rather than in the action registry: these are settings of
+            // this program, not things the Windows 10 taskbar menu could do — so they are not
+            // shell actions. But this app has no main window and its tray icon is usually hidden
+            // behind the overflow chevron, so the menu the user already opens is the only place
+            // they will ever look for them.
             ExtraItemsFactory = () => new[]
             {
+                MenuItemViewModel.Toggle(
+                    Localization.Get("menu.startup"),
+                    StartupRegistration.IsEnabled,
+                    ToggleStartup),
                 MenuItemViewModel.Command(Localization.Get("menu.exit"), () => Shutdown())
             }
         };
@@ -101,14 +114,17 @@ public partial class App : System.Windows.Application
         _tray = new TrayIcon();
         _tray.OpenMenuRequested += (_, _) => ShowMenuAtCursor();
         _tray.ExitRequested += (_, _) => Shutdown();
+        _tray.StartupToggleRequested += (_, _) => ToggleStartup();
 
         // Doorbell for `--quit`.
         _quitSignal = new EventWaitHandle(initialState: false, EventResetMode.AutoReset, QuitEventName, out _);
         ThreadPool.RegisterWaitForSingleObject(_quitSignal, OnQuitSignalled, null, Timeout.Infinite, executeOnlyOnce: false);
 
         var taskbar = TaskbarInfo.TryGetRect(out var tb) ? tb.ToString() : "<未找到>";
+        var launchedAtSignIn = e.Args.Any(a => a == StartupRegistration.StartupArgument);
         _started = true;
-        Log.Write($"启动完成。语言={Localization.Current} 钩子已装={hookInstalled} 任务栏={taskbar}");
+        Log.Write($"启动完成。语言={Localization.Current} 钩子已装={hookInstalled} 任务栏={taskbar}"
+                  + (launchedAtSignIn ? " （开机自启）" : string.Empty));
     }
 
     /// <summary>
@@ -148,6 +164,39 @@ public partial class App : System.Windows.Application
         _menu.ShowAtPhysical(x, y);
     }
 
+    /// <summary>
+    /// Flip the start-at-sign-in setting. The current state is re-read here rather than passed
+    /// in, so the toggle does the opposite of what is actually registered even if the registry
+    /// changed behind our back since the menu was built.
+    /// </summary>
+    private static void ToggleStartup()
+    {
+        var turningOn = !StartupRegistration.IsEnabled;
+
+        bool ok;
+        string? error;
+        if (turningOn) ok = StartupRegistration.TryEnable(out error);
+        else ok = StartupRegistration.TryDisable(out error);
+
+        Log.Write(turningOn
+            ? ok
+                ? $"已开启开机自启：{StartupRegistration.CommandLine}"
+                : $"开启开机自启失败：{error}"
+            : ok
+                ? "已关闭开机自启"
+                : $"关闭开机自启失败：{error}");
+
+        if (ok) return;
+
+        // A menu row that does nothing when clicked is worse than an error message. This is the
+        // only place the app shows a dialog, and it only happens on the failure path.
+        System.Windows.Forms.MessageBox.Show(
+            $"{Localization.Get("startup.failed")}\n\n{error}",
+            Localization.Get("app.name"),
+            System.Windows.Forms.MessageBoxButtons.OK,
+            System.Windows.Forms.MessageBoxIcon.Warning);
+    }
+
     private void OnQuitSignalled(object? state, bool timedOut)
     {
         Log.Write("收到 --quit 信号，退出");
@@ -179,6 +228,9 @@ public partial class App : System.Windows.Application
         Console.WriteLine();
         Console.WriteLine("  TaskbarExtras.exe                  启动（出现托盘图标）");
         Console.WriteLine("  TaskbarExtras.exe --quit           让正在运行的实例退出");
+        Console.WriteLine("  TaskbarExtras.exe --autostart      查看是否已设为开机自启");
+        Console.WriteLine("  TaskbarExtras.exe --autostart on   设为开机自启");
+        Console.WriteLine("  TaskbarExtras.exe --autostart off  取消开机自启");
         Console.WriteLine("  TaskbarExtras.exe --lang zh|en     强制界面语言");
         Console.WriteLine("  TaskbarExtras.exe --skin win11|win10  菜单外观（默认 win11）");
         Console.WriteLine("  TaskbarExtras.exe --preview        只显示一次菜单，用来预览皮肤");
@@ -188,6 +240,58 @@ public partial class App : System.Windows.Application
         Console.WriteLine("  1. 右键任务栏空白处 → 「退出 TaskbarExtras」");
         Console.WriteLine("  2. 右键托盘图标（可能在 ^ 折叠区里）→ 退出");
         Console.WriteLine("  3. 运行 TaskbarExtras.exe --quit");
+    }
+
+    /// <summary>
+    /// Handles <c>--autostart</c> (report) and <c>--autostart on|off</c> (change).
+    ///
+    /// <para>
+    /// Deliberately does not touch the running instance: the setting is stored in the registry
+    /// and the menu re-reads it every time it opens, so a running copy picks the change up by
+    /// itself. There is nothing to notify.
+    /// </para>
+    /// </summary>
+    /// <returns>True when the argument was present and has been handled.</returns>
+    private static bool TryHandleAutostartArgument(string[] args)
+    {
+        var index = Array.FindIndex(args, a => a is "--autostart" or "--startup-setting");
+        if (index < 0) return false;
+
+        var value = index + 1 < args.Length ? args[index + 1].Trim().ToLowerInvariant() : null;
+        ParentConsole.TryAttach();
+
+        switch (value)
+        {
+            case "on" or "enable" or "true":
+                Console.WriteLine(StartupRegistration.TryEnable(out var enableError)
+                    ? $"已开启开机自启：{StartupRegistration.CommandLine}"
+                    : $"开启开机自启失败：{enableError}");
+                break;
+
+            case "off" or "disable" or "false":
+                Console.WriteLine(StartupRegistration.TryDisable(out var disableError)
+                    ? "已关闭开机自启。"
+                    : $"关闭开机自启失败：{disableError}");
+                break;
+
+            default:
+                if (StartupRegistration.IsEnabled)
+                {
+                    Console.WriteLine($"开机自启：已开启");
+                    Console.WriteLine($"  {StartupRegistration.CommandLine}");
+                }
+                else
+                {
+                    Console.WriteLine("开机自启：未开启");
+                    Console.WriteLine($"  当前程序：{StartupRegistration.ExecutablePath ?? "<未知>"}");
+                }
+
+                Console.WriteLine();
+                Console.WriteLine("用法：TaskbarExtras.exe --autostart on|off");
+                break;
+        }
+
+        return true;
     }
 
     /// <summary>Supports <c>--lang en</c> / <c>--lang zh</c>; otherwise the OS UI language wins.</summary>

@@ -22,6 +22,7 @@ public sealed class TrayIcon : IDisposable
 {
     private readonly NotifyIcon _icon;
     private readonly Icon _iconImage;
+    private readonly ToolStripMenuItem _startupItem;
     private bool _disposed;
 
     /// <summary>Left-click: show the menu (same menu the taskbar right-click shows).</summary>
@@ -30,10 +31,27 @@ public sealed class TrayIcon : IDisposable
     /// <summary>From the tray's own menu. Without this the process would be unkillable by normal means.</summary>
     public event EventHandler? ExitRequested;
 
+    /// <summary>
+    /// Flip start-at-sign-in. Routed back to the host rather than handled here so the setting is
+    /// changed in exactly one place, error dialog included.
+    /// </summary>
+    public event EventHandler? StartupToggleRequested;
+
     public TrayIcon()
     {
         var menu = new ContextMenuStrip();
         menu.Items.Add(Localization.Get("tray.open-menu"), null, (_, _) => OpenMenuRequested?.Invoke(this, EventArgs.Empty));
+        menu.Items.Add(new ToolStripSeparator());
+
+        _startupItem = new ToolStripMenuItem(Localization.Get("menu.startup"));
+        _startupItem.Click += (_, _) => StartupToggleRequested?.Invoke(this, EventArgs.Empty);
+        menu.Items.Add(_startupItem);
+
+        // The tick has to be refreshed on every open, not set once at construction: the setting
+        // can also be changed from the replacement menu or from the command line, and a stale
+        // tick would be worse than none.
+        menu.Opening += (_, _) => _startupItem.Checked = StartupRegistration.IsEnabled;
+
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(Localization.Get("tray.open-log"), null, (_, _) => OpenLog());
         menu.Items.Add(Localization.Get("tray.exit"), null, (_, _) => ExitRequested?.Invoke(this, EventArgs.Empty));
