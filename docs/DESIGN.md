@@ -821,6 +821,94 @@ TaskbarExtras/
 
 ---
 
+## 8.5 系统托盘区（Win10 小图标）—— 可行性结论：不做
+
+**用户需求（2026-10-10）**：「任务栏托盘的图标优化，Win11 的太大了，回到 Win10 样式」，
+并澄清指的是**整个系统托盘区**，不是本程序自己的托盘图标。
+
+**结论：在「不注入 + 只用文档化 API」的约束下做不到。** 下面是实测依据，不是推测。
+
+#### 实测 1：托盘区已经是 XAML，没有可操作的 HWND
+
+```
+Shell_TrayWnd  (0,1528)-(2560,1600)
+  ├─ Windows.UI.Composition.DesktopWindowContentBridge  ← 整条任务栏的 XAML 合成宿主
+  │    └─ Windows.UI.Input.InputSite.WindowClass         ← 只有输入站点，没有按钮
+  ├─ Start                          (0,1528)-(83,1600)
+  ├─ TrayNotifyWnd                  (1459,1528)-(2560,1600)   ← ★ 一个 HWND，内部无子窗口
+  ├─ ReBarWindow32                  (83,1528)-(875,1600)
+  │    └─ MSTaskSwWClass → MSTaskListWClass（遗留容器，rect 不再更新）
+  └─ TrayDummySearchControl         (0,1528)-(0,1528)  空
+```
+
+*`TrayNotifyWnd` 子树枚举结果：**零个子窗口**。* Win10 时代每个托盘图标是一个
+`ToolbarWindow32` 子窗口（可以用 `TB_BUTTON` 消息读图标位置和图像），
+**Win11 全部改成 XAML 元素，一个 HWND 都没有** —— 和 §6.5 任务按钮的情况完全一样。
+
+#### 实测 2：UIA 只能拿到位置和名字，拿不到图像
+
+UIA 树里托盘图标确实存在，类名 `SystemTray.NormalButton`（本机 14 个）：
+
+```
+- ControlType.Button name='NVIDIA 设置'        cls='SystemTray.NormalButton'  (1651,1528)-(1699,1600)
+  └─ ControlType.Image                        cls='Image'                    (1663,1552)-(1687,1576)
+- ControlType.Button name='任务栏输入指示 …'   cls='SystemTray.NormalButton'  (2179,1528)-(2245,1600)
+- ControlType.Button name='网络 QwQ_5G …'     cls='SystemTray.AccentButton'  (2251,1528)-(2287,1600)
+- ControlType.Button name='音量 …'             cls='SystemTray.OmniButtonCenter'
+- ControlType.Button name='时钟 …'             cls='SystemTray.OmniButtonLeft'
+- ControlType.Button name='显示桌面'           cls='SystemTray.ShowDesktopButton' (2542,1528)-(2560,1600)
+```
+
+★ 关键：**UIA 没有「Image 图案」模式**（`AutomationPattern` 里不存在取位图的成员）。
+`Image` 元素只能给出 `BoundingRectangle`。实测各属性可用性：
+
+| 属性 | 结果 |
+|---|---|
+| `HelpText` / `ItemStatus` / `AcceleratorKey` | `<不支持>` |
+| `LocalizedControlType` | `按钮`（无信息量） |
+| `Value` | 不支持 |
+| `Invoke` | ✅ 支持（触发左键点击是可行的） |
+| 位图本身 | **拿不到** |
+
+→ 能把位置读准、能触发点击，**但复制不出图标**。
+
+#### 三条路都堵死
+
+| 方案 | 为什么不行 |
+|---|---|
+| **A. 用 `ITrayNotify` / `NotifyIconSettings` 读图标列表和图像** | 未文档化 COM 接口 + 私有结构体布局。**直接违背项目第 1 条原则**（见 §1.2）。且 Win11 上 explorer 已改用 XAML 渲染，这条老路能否取到图像本身就存疑 |
+| **B. 在 `TrayNotifyWnd` 上盖一个自绘窗口** | 能遮住原托盘，但要复刻 20+ 个图标、时钟、输入法指示、网络/音量/电池、通知中心、显示桌面按钮的**全部交互**（左键右键中键滚轮、拖拽排序、悬停提示、badge、进度条叠加）。而且被遮住的原托盘仍然在跑 —— 位置一变就对不齐。**成本远超收益**，且必然出现「点了没反应 / 点错」这类最难排查的故障 |
+| **C. 用 `SetWindowPos` 缩小任务栏高度/托盘区** | Win11 的任务栏高度由 XAML 布局决定，不是 HWND 尺寸。改 `Shell_TrayWnd` 的 rect 不会让 XAML 内容跟着缩，只会错位 |
+
+#### 为什么 Win10 时代可以、Win11 不行
+
+Win10 的托盘是**真正 Win32 工具栏控件**：`TrayNotifyWnd` 下有 `ToolbarWindow32`，
+可以用 `TB_GETBUTTON` 枚举图标、`TB_GETIMAGELIST` 拿到 `HIMAGELIST`、
+`ImageList_GetIcon` 取出位图，再用自己的工具栏按任意尺寸重画。**全部文档化。**
+
+Win11 把这层整体换成了 XAML（`Windows.UI.Composition` 合成），
+图标变成了 XAML 元素（`SystemTray.NormalButton` / `Image`）。
+微软没有为「替换托盘渲染」提供任何文档化扩展点。
+
+> 和 §6.3 的结论一致：**不是大家不想走文档化的路，是这条路微软根本没修。**
+> 恢复托盘样式的工具（ExplorerPatcher、StartAllBack）全靠按 build 分发的
+> `ep_taskbar.*.dll` / 注入 explorer —— 正是本项目明确拒绝的做法。
+
+#### 那还能做什么（已实现的部分）
+
+用户诉求里「图标太大」这半句，**本程序自己的托盘图标**已经解决了：
+16/20/24/32/48 五个尺寸打包进一个 `.ico`（PNG 帧），Windows 按需取整帧，
+小尺寸下不再被重采样糊掉。这是唯一能控制的部分。
+
+#### 若将来一定要做
+
+唯一现实中可行的形态是 **A′：自己实现整个通知区域**（RetroBar 路线），
+即「隐藏原生任务栏 + 自己画一条完整的任务栏」。那已经超出本项目的定位
+（§1.3 明确列为非目标），且需要按 Windows build 维护多套实现。
+**结论：列为「不做」，理由和成本记录在此，不留悬念。**
+
+---
+
 ## 附录 A：本机环境现状（2026-10-05 实测）
 
 | 项 | 值 |

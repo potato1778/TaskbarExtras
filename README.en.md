@@ -114,7 +114,10 @@ The reason is practical: tools built on injection have to be rewritten every tim
 - [ ] More skins
 - [ ] A Windows 10 style Start menu
 - [ ] Live tiles
-- [ ] A Windows 10 style taskbar and tray
+
+### Not doing
+
+- **A Windows 10 style system tray (small icons).** Windows 11 draws the tray with XAML. No documented API changes its icon size, and the icon bitmaps cannot be read back out. The only ways in are injecting into explorer or redrawing the whole taskbar — neither fits this project. Measurements in [docs/DESIGN.md](docs/DESIGN.md) §8.5.
 
 ## Known issues
 

@@ -114,7 +114,12 @@ TaskbarExtras.exe --preview --skin win10
 - [ ] 做更多样式
 - [ ] Windows 10 风格的开始菜单
 - [ ] 恢复磁贴
-- [ ] 恢复 Windows 10 风格的任务栏和托盘
+
+### 不做
+
+- **恢复 Windows 10 风格的系统托盘区（小图标）** —— Windows 11 的托盘是 XAML 画的，
+  没有文档化接口能改它的图标尺寸，也读不到图标图像。要做只能注入 explorer 或自己重画整条任务栏，
+  两条路都超出这个项目的定位。实测数据在 [docs/DESIGN.md](docs/DESIGN.md) §8.5。
 
 ## 已知问题
 
