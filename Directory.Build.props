@@ -9,7 +9,7 @@
     <PlatformTarget>x64</PlatformTarget>
 
     <Product>TaskbarExtras</Product>
-    <Version>0.5.0</Version>
+    <Version>0.5.1</Version>
     <Authors>potato1778</Authors>
     <Description>Restore the Windows 10 style taskbar context menu on Windows 11 — without injecting into explorer.exe.</Description>
     <RepositoryUrl>https://github.com/potato1778/TaskbarExtras</RepositoryUrl>

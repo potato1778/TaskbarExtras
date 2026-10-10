@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using TaskbarExtras.Actions;
 using TaskbarExtras.Shell;
 
@@ -108,10 +109,29 @@ public partial class ClassicMenuWindow : Window
         // mnemonic keys silently did nothing the first time they were tested.
         Focus();
 
-        // Windows only delivers keystrokes to the foreground window, so if the menu did not
-        // actually come forward the letters cannot work. Logged rather than worked around: the
-        // usual fix (AttachThreadInput) is invasive, and this has not been seen to fail yet.
-        if (!IsActive) Log.Write("警告：菜单未取得前台焦点，字母键可能不生效");
+        // Activate() is not enough on its own. The click that opened this menu was swallowed by
+        // our own hook, so no window received the input Windows requires before it will let a
+        // process come forward — the menu would appear unfocused and every keystroke would go to
+        // whatever was in front. See WindowFocus.
+        var handle = new WindowInteropHelper(this).Handle;
+        if (!WindowFocus.TryBringToForeground(handle, out var detail))
+            Log.Write($"警告：菜单未能取得前台焦点，字母键不会生效（{detail}）");
+
+        // And one more time, after the message loop has processed the WM_ACTIVATE that tells WPF
+        // this window became active. Focus() called synchronously here races that message; losing
+        // the race leaves the window with no focused element, so key events have no source to
+        // route from and the letters do nothing — silently, with no error anywhere.
+        //
+        // Do NOT move this into an Activated handler: calling Focus() from inside WPF's handling
+        // of WM_ACTIVATE re-enters focus management and breaks keyboard input completely, which
+        // is worse than the bug it was meant to fix.
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (!IsVisible) return;
+            Focus();
+            if (Keyboard.FocusedElement is null)
+                Log.Write("警告：菜单没有取得键盘焦点，字母键不会生效");
+        }), DispatcherPriority.Input);
     }
 
     /// <summary>
@@ -176,12 +196,23 @@ public partial class ClassicMenuWindow : Window
 
     private void OnDeactivated(object? sender, EventArgs e) => Hide();
 
-    private void OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    private void OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        // Alt+letter arrives as Key.System with the real key tucked into SystemKey. Windows
-        // writes its mnemonics for Alt, so handling this is the difference between the letters
-        // working and merely looking like they should.
-        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        // A plain letter can arrive three different ways, and two of them hide the real key
+        // behind a different property. Read e.Key alone and the letters silently do nothing:
+        //
+        //   Key.System       Alt+letter; the real key is in SystemKey.
+        //   Key.ImeProcessed An IME is active; the real key is in ImeProcessedKey. This is the
+        //                    one that matters on a Chinese machine — with 微软拼音 running,
+        //                    pressing X reports ImeProcessed, and an IME-processed key never
+        //                    raises KeyDown at all, so this handler has to be PreviewKeyDown.
+        //   anything else    the key itself.
+        var key = e.Key switch
+        {
+            Key.System => e.SystemKey,
+            Key.ImeProcessed => e.ImeProcessedKey,
+            var other => other
+        };
 
         if (key == Key.Escape)
         {
@@ -198,6 +229,11 @@ public partial class ClassicMenuWindow : Window
         foreach (var item in ItemsHost.ItemsSource?.Cast<MenuItemViewModel>() ?? [])
         {
             if (item.Mnemonic != pressed || !item.IsEnabled) continue;
+
+            // The key reached the input method before it reached us, so by now the IME is holding
+            // a stray letter that would surface the next time the user types. Throw it away.
+            if (e.Key == Key.ImeProcessed)
+                ImeComposition.Cancel(new WindowInteropHelper(this).Handle);
 
             Hide();
             Dispatcher.BeginInvoke(new Action(() => Run(item)));

@@ -151,6 +151,46 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     internal static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
+    // ---------------------------------------------------------------- Foreground / focus
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern IntPtr SetFocus(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, [MarshalAs(UnmanagedType.Bool)] bool fAttach);
+
+    [DllImport("kernel32.dll")]
+    internal static extern uint GetCurrentThreadId();
+
+    // ---------------------------------------------------------------- IME
+
+    /// <summary>
+    /// Cancels an in-progress input-method composition. Needed because an IME sees a key before
+    /// we do: when a mnemonic letter is consumed from the menu, the input method is already
+    /// holding that character and would commit it later.
+    /// </summary>
+    internal const uint NI_COMPOSITIONSTR = 0x0015;
+    internal const uint CPS_CANCEL = 0x0004;
+
+    [DllImport("imm32.dll")]
+    internal static extern IntPtr ImmGetContext(IntPtr hWnd);
+
+    [DllImport("imm32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool ImmReleaseContext(IntPtr hWnd, IntPtr hIMC);
+
+    [DllImport("imm32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool ImmNotifyIME(IntPtr hIMC, uint dwAction, uint dwIndex, uint dwValue);
+
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     internal static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
@@ -224,9 +264,6 @@ internal static class NativeMethods
     // ---------------------------------------------------------------- Foreground
 
     internal const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
-
-    [DllImport("user32.dll", SetLastError = true)]
-    internal static extern IntPtr GetForegroundWindow();
 
     // ---------------------------------------------------------------- Console
 

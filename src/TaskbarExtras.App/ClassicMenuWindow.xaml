@@ -10,7 +10,7 @@
         ResizeMode="NoResize"
         SizeToContent="WidthAndHeight"
         Deactivated="OnDeactivated"
-        KeyDown="OnKeyDown">
+        PreviewKeyDown="OnPreviewKeyDown">
 
   <Border Style="{StaticResource MenuBorderStyle}" MinWidth="240">
     <ItemsControl x:Name="ItemsHost">
