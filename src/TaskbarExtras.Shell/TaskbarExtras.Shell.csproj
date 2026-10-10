@@ -13,4 +13,17 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <!--
+    For UIAutomationClient (System.Windows.Automation), used by TaskbarButtonMap.
+
+    It lives in the Windows Desktop framework, so this project needs the framework
+    reference even though it contains no WPF or WinForms code. That is a deliberate,
+    narrow exception: the alternative is hand-writing IUIAutomation COM interfaces,
+    which is a lot of fragile code to avoid one reference. Nothing here uses a WPF
+    type - the project stays the only place allowed to touch the OS, as before.
+  -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
+  </ItemGroup>
+
 </Project>

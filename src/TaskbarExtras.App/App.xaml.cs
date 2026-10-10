@@ -86,6 +86,12 @@ public partial class App : System.Windows.Application
         // Pay the first-show cost now instead of on the user's first right-click.
         _menu.WarmUp();
 
+        // The task buttons on a Windows 11 taskbar are XAML, so their positions exist nowhere in
+        // the window tree — UI Automation is the only source, and it is polled on a background
+        // thread so the mouse hook never has to make a cross-process call. Start it before the
+        // hook goes live. See TaskbarButtonMap.
+        TaskbarButtonMap.Start();
+
         // Swallow the right-click at the source, so the shell's own menu never appears.
         _hook = new TaskbarRightClickHook();
         _hook.RightClickSwallowed += OnRightClickSwallowed;
@@ -124,8 +130,7 @@ public partial class App : System.Windows.Application
         var launchedAtSignIn = e.Args.Any(a => a == StartupRegistration.StartupArgument);
         _started = true;
         Log.Write($"启动完成。语言={Localization.Current} 钩子已装={hookInstalled} 任务栏={taskbar}"
-                  + (launchedAtSignIn ? " （开机自启）" : string.Empty));
-    }
+                  + (launchedAtSignIn ? " （开机自启）" : string.Empty));    }
 
     /// <summary>
     /// Runs on the hook thread, i.e. inside the low-level mouse hook. It must return quickly:
@@ -359,6 +364,7 @@ public partial class App : System.Windows.Application
         // The `--quit` invocation also reaches OnExit, and logging "退出" there would make the
         // log look like the app exited twice.
         if (_started) Log.Write("退出");
+        TaskbarButtonMap.Stop();
         _tray?.Dispose();
         _hook?.Dispose();
         _menu?.Close();

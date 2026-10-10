@@ -74,28 +74,45 @@ public static class TaskbarInfo
     /// right-clicking should bring up our replacement menu.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// This check is what makes the hook approach safe. Swallowing every right-click over the
     /// taskbar would kill jump lists and the Win+X menu, which would be a far worse regression
     /// than the problem being solved.
+    /// </para>
+    /// <para>
+    /// Two sources are consulted, and the order matters. <see cref="TaskbarButtonMap"/> asks UI
+    /// Automation where the buttons really are, which is the only thing that works on Windows 11
+    /// — see that class for the measurements. The child-window walk below stays as a second
+    /// opinion: it covers the pieces of the taskbar that UIA does not report as buttons (and it
+    /// is all that is left if UIA fails).
+    /// </para>
     /// </remarks>
     public static bool IsOverEmptyTaskbarArea(int x, int y) => IsOverEmptyTaskbarArea(x, y, out _);
 
     /// <summary>
-    /// Same as <see cref="IsOverEmptyTaskbarArea(int,int)"/>, but reports <i>which</i> child
-    /// window blocked the point. This exists because the first version of this check returned a
-    /// bare bool, and when the hook silently stopped firing there was no way to tell whether the
-    /// point had missed the taskbar entirely or landed on a child window — both looked identical
-    /// from the outside. Diagnostics for a global hook are not optional.
+    /// Same as <see cref="IsOverEmptyTaskbarArea(int,int)"/>, but reports <i>what</i> blocked the
+    /// point. This exists because the first version of this check returned a bare bool, and when
+    /// the hook silently stopped firing there was no way to tell whether the point had missed the
+    /// taskbar entirely or landed on a child window — both looked identical from the outside.
+    /// Diagnostics for a global hook are not optional.
     /// </summary>
     /// <param name="blockingClass">
-    /// Class name of the child window that owns the point, or null when nothing blocked it.
-    /// Null does <b>not</b> mean the point was over the taskbar — check
+    /// What owns the point: a UIA button, a child window class name, or null when nothing
+    /// blocked it. Null does <b>not</b> mean the point was over the taskbar — check
     /// <see cref="TryGetRect"/> separately.
     /// </param>
     public static bool IsOverEmptyTaskbarArea(int x, int y, out string? blockingClass)
     {
         blockingClass = null;
         if (!TryGetRect(out var taskbar) || !taskbar.Contains(x, y)) return false;
+
+        // The authoritative check on Windows 11: the task buttons are XAML, and this is the only
+        // thing that knows where they are.
+        if (TaskbarButtonMap.IsOverAnyButton(x, y))
+        {
+            blockingClass = "UIA button";
+            return false;
+        }
 
         var taskbarHandle = Handle;
         if (taskbarHandle == IntPtr.Zero) return true;

@@ -117,6 +117,7 @@ The reason is practical: tools built on injection have to be rewritten every tim
 - About 40 ms between the right-click and the menu appearing — swallowing the click and then rendering can't be made free.
 - No config file. Skin and language are command-line only.
 - No compatibility handling for other taskbar tools; running them side by side may fight.
+- Telling "empty taskbar" apart from "an app button" needs UI Automation, because Windows 11 draws the task buttons with XAML and their positions exist nowhere in the window tree. The snapshot is rebuilt once a second. If UIA ever comes up empty it falls back to the old window-tree test, which can misjudge on Windows 11.
 
 ## Licence
 
