@@ -30,6 +30,10 @@ public partial class App : System.Windows.Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Settings first: the language and skin arguments below both consult the stored values,
+        // and both must be resolved before the menu window exists.
+        AppSettings.Load();
         ApplyLanguageArgument(e.Args);
 
         if (e.Args.Any(a => a is "--help" or "-h" or "/?"))
@@ -54,6 +58,13 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // Likewise: writes a file, does not need the UI, and must work while another copy runs.
+        if (TryHandleSkinSetArgument(e.Args))
+        {
+            Shutdown();
+            return;
+        }
+
         Log.Reset();
 
         if (!ClaimSingleInstance())
@@ -63,8 +74,8 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // Must happen before the menu window exists — see ApplySkinArgument.
-        ApplySkinArgument(e.Args);
+        // Must happen before the menu window exists — see ApplySkin.
+        ApplySkin(e.Args);
 
         _menu = new ClassicMenuWindow(Registry)
         {
@@ -75,6 +86,16 @@ public partial class App : System.Windows.Application
             // they will ever look for them.
             ExtraItemsFactory = withMnemonic => new[]
             {
+                MenuItemViewModel.Heading(Localization.Get("menu.appearance"), withMnemonic),
+                MenuItemViewModel.Radio(
+                    Localization.Get("menu.skin.win11"), '1',   // keyed 1 / 2: no letters free, and
+                    AppSettings.Skin == "win11", withMnemonic, // the numbers read as a pick-list
+                    () => SwitchSkin("win11")),
+                MenuItemViewModel.Radio(
+                    Localization.Get("menu.skin.win10"), '2',
+                    AppSettings.Skin == "win10", withMnemonic,
+                    () => SwitchSkin("win10")),
+                MenuItemViewModel.Separator(),
                 MenuItemViewModel.Toggle(
                     Localization.Get("menu.startup"), 'A',   // Autostart
                     StartupRegistration.IsEnabled, withMnemonic, ToggleStartup),
@@ -122,6 +143,7 @@ public partial class App : System.Windows.Application
         _tray.OpenMenuRequested += (_, _) => ShowMenuAtCursor();
         _tray.ExitRequested += (_, _) => Shutdown();
         _tray.StartupToggleRequested += (_, _) => ToggleStartup();
+        _tray.SkinSwitchRequested += (_, skin) => SwitchSkin(skin);
 
         // Doorbell for `--quit`.
         _quitSignal = new EventWaitHandle(initialState: false, EventResetMode.AutoReset, QuitEventName, out _);
@@ -238,14 +260,52 @@ public partial class App : System.Windows.Application
         Console.WriteLine("  TaskbarExtras.exe --autostart on   设为开机自启");
         Console.WriteLine("  TaskbarExtras.exe --autostart off  取消开机自启");
         Console.WriteLine("  TaskbarExtras.exe --lang zh|en     强制界面语言");
-        Console.WriteLine("  TaskbarExtras.exe --skin win11|win10  菜单外观（默认 win11）");
+        Console.WriteLine("  TaskbarExtras.exe --skin win11|win10  本次运行的菜单外观");
+        Console.WriteLine("  TaskbarExtras.exe --skin-set win11|win10");
+        Console.WriteLine("                                     改默认外观并记住（下次启动生效）");
         Console.WriteLine("  TaskbarExtras.exe --preview        只显示一次菜单，用来预览皮肤");
         Console.WriteLine("  TaskbarExtras.exe --help           显示这段说明");
+        Console.WriteLine();
+        Console.WriteLine("外观也可以在菜单里改：右键任务栏空白处 →「外观」→ 选一个。");
+        Console.WriteLine($"设置存在 {AppSettings.Location}");
         Console.WriteLine();
         Console.WriteLine("退出方式（任选其一）：");
         Console.WriteLine("  1. 右键任务栏空白处 → 「退出 TaskbarExtras」");
         Console.WriteLine("  2. 右键托盘图标（可能在 ^ 折叠区里）→ 退出");
         Console.WriteLine("  3. 运行 TaskbarExtras.exe --quit");
+    }
+
+    /// <summary>
+    /// Handles <c>--skin-set win11|win10</c>: writes the choice to the settings file without
+    /// starting the UI.
+    ///
+    /// <para>
+    /// Separate from <c>--skin</c>, which only affects the run it was passed to. This one is the
+    /// scriptable form of the menu's appearance picker, and it exists because the running instance
+    /// cannot be told to reload — the skin is baked in when the menu window is constructed. So
+    /// this reports whether a restart is needed rather than pretending it took effect live.
+    /// </para>
+    /// </summary>
+    /// <returns>True when the argument was present and has been handled.</returns>
+    private static bool TryHandleSkinSetArgument(string[] args)
+    {
+        var index = Array.FindIndex(args, a => a is "--skin-set" or "--set-skin");
+        if (index < 0) return false;
+
+        var value = index + 1 < args.Length ? args[index + 1].Trim().ToLowerInvariant() : null;
+        ParentConsole.TryAttach();
+
+        if (value is not ("win10" or "win11"))
+        {
+            Console.WriteLine("用法：TaskbarExtras.exe --skin-set win11|win10");
+            return true;
+        }
+
+        AppSettings.SetSkin(value);
+        Console.WriteLine(AppSettings.Save()
+            ? $"默认外观已设为 {value}。重启 TaskbarExtras 后生效。"
+            : "写入设置文件失败，未能保存。");
+        return true;
     }
 
     /// <summary>
@@ -301,6 +361,11 @@ public partial class App : System.Windows.Application
     }
 
     /// <summary>Supports <c>--lang en</c> / <c>--lang zh</c>; otherwise the OS UI language wins.</summary>
+    /// <summary>
+    /// Resolves the language with the same precedence the skin uses: command line, then the stored
+    /// setting, then whatever the OS culture implies (already applied by
+    /// <see cref="Localization"/>'s initialiser).
+    /// </summary>
     private static void ApplyLanguageArgument(string[] args)
     {
         for (var i = 0; i < args.Length - 1; i++)
@@ -311,21 +376,77 @@ public partial class App : System.Windows.Application
                 return;
             }
         }
+
+        if (AppSettings.Language is { } stored) Localization.TrySetLanguage(stored);
     }
 
     /// <summary>
-    /// Swaps the merged skin dictionary. <b>Must run before the menu window is constructed</b>:
-    /// the menu's XAML binds to the skin with <c>StaticResource</c>, which resolves once at load
-    /// time, so a swap afterwards would silently do nothing. (Supporting a live switch would mean
-    /// moving every brush reference to <c>DynamicResource</c>.)
+    /// Switches skin at runtime: remembers the choice, then relaunches so it takes effect.
+    ///
+    /// <para>
+    /// A restart rather than a live swap, because the menu's XAML binds to the skin with
+    /// <c>StaticResource</c> — resolving once at load time, so writing the dictionary afterwards
+    /// would silently do nothing. Switching every brush to <c>DynamicResource</c> would make a
+    /// live swap possible, but it is a large mechanical change across both skins for a setting
+    /// users touch once. Documented here so the next person does not rediscover it.
+    /// </para>
+    ///
+    /// <para>
+    /// The language argument is carried over explicitly: the relaunch must not silently drop a
+    /// <c>--lang</c> the user started with.
+    /// </para>
     /// </summary>
-    private static void ApplySkinArgument(string[] args)
+    private void SwitchSkin(string skin)
     {
-        var requested = "win11";
-        for (var i = 0; i < args.Length - 1; i++)
+        AppSettings.SetSkin(skin);
+        if (!AppSettings.Save())
         {
-            if (args[i] is "--skin" or "-s") requested = args[i + 1].Trim().ToLowerInvariant();
+            Log.Write("皮肤已切换，但设置未能写入磁盘 —— 重启后会恢复原样。");
         }
+
+        var exe = Environment.ProcessPath;
+        if (string.IsNullOrEmpty(exe))
+        {
+            Log.Write("找不到自身路径，无法自动重启。请手动重启 TaskbarExtras。");
+            return;
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe)
+            {
+                UseShellExecute = true,
+                Arguments = $"--skin {skin}"
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"重启失败，请手动启动: {ex.Message}");
+        }
+
+        Shutdown();
+    }
+
+    /// <summary>
+    /// Picks the skin and swaps the merged dictionary.
+    ///
+    /// <para>
+    /// Precedence is <b>command line &gt; stored setting &gt; built-in default</b>. The command
+    /// line wins so <c>--skin win11</c> still works as a one-off override and <c>--preview</c> can
+    /// show a skin without committing to it; otherwise the remembered choice from
+    /// <see cref="AppSettings"/> is used, which is what makes a skin stick across restarts.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Must run before the menu window is constructed</b>: the menu's XAML binds to the skin
+    /// with <c>StaticResource</c>, which resolves once at load time, so a swap afterwards would
+    /// silently do nothing. (Supporting a live switch would mean moving every brush reference to
+    /// <c>DynamicResource</c>.)
+    /// </para>
+    /// </summary>
+    private static void ApplySkin(string[] args)
+    {
+        var requested = SkinFromArguments(args) ?? AppSettings.Skin;
 
         var fileName = requested switch
         {
@@ -338,6 +459,7 @@ public partial class App : System.Windows.Application
         {
             Log.Write($"未知皮肤 '{requested}'，回退到 win11");
             fileName = "Win11.xaml";
+            requested = AppSettings.DefaultSkin;
         }
 
         try
@@ -345,6 +467,7 @@ public partial class App : System.Windows.Application
             var dictionary = new ResourceDictionary { Source = new Uri($"Skins/{fileName}", UriKind.Relative) };
             Current.Resources.MergedDictionaries.Clear();
             Current.Resources.MergedDictionaries.Add(dictionary);
+            AppSettings.SetSkin(requested);
             Log.Write($"皮肤 = {fileName}");
         }
         catch (Exception ex)
@@ -352,6 +475,21 @@ public partial class App : System.Windows.Application
             // Leave the dictionary from App.xaml in place rather than starting with no skin at all.
             Log.Write($"皮肤 '{fileName}' 加载失败，沿用默认: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// The skin named on the command line, or null when the argument is absent. Returning null
+    /// rather than a default is what lets <see cref="ApplySkin"/> tell "the user asked for win11"
+    /// apart from "the user said nothing" — the two need different treatment.
+    /// </summary>
+    private static string? SkinFromArguments(string[] args)
+    {
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] is "--skin" or "-s") return args[i + 1].Trim().ToLowerInvariant();
+        }
+
+        return null;
     }
 
     private static bool ClaimSingleInstance()

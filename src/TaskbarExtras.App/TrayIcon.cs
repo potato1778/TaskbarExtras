@@ -25,6 +25,8 @@ public sealed class TrayIcon : IDisposable
     private readonly NotifyIcon _icon;
     private readonly Icon _iconImage;
     private readonly ToolStripMenuItem _startupItem;
+    private readonly ToolStripMenuItem _win11Item;
+    private readonly ToolStripMenuItem _win10Item;
     private bool _disposed;
 
     /// <summary>Left-click: show the menu (same menu the taskbar right-click shows).</summary>
@@ -39,6 +41,12 @@ public sealed class TrayIcon : IDisposable
     /// </summary>
     public event EventHandler? StartupToggleRequested;
 
+    /// <summary>
+    /// Switch skin. Raised with the skin name. Routed to the host because the switch has to
+    /// persist the setting and relaunch, neither of which belongs in the tray.
+    /// </summary>
+    public event EventHandler<string>? SkinSwitchRequested;
+
     public TrayIcon()
     {
         var menu = new ContextMenuStrip();
@@ -49,10 +57,27 @@ public sealed class TrayIcon : IDisposable
         _startupItem.Click += (_, _) => StartupToggleRequested?.Invoke(this, EventArgs.Empty);
         menu.Items.Add(_startupItem);
 
-        // The tick has to be refreshed on every open, not set once at construction: the setting
-        // can also be changed from the replacement menu or from the command line, and a stale
-        // tick would be worse than none.
-        menu.Opening += (_, _) => _startupItem.Checked = StartupRegistration.IsEnabled;
+        // The appearance entries are duplicated here on purpose. The replacement menu is the nice
+        // place for them, but reaching it depends on the mouse hook having installed successfully —
+        // and if it ever has not, a user who wants the other skin would have no way to say so.
+        var appearance = new ToolStripMenuItem(Localization.Get("menu.appearance"));
+        _win11Item = new ToolStripMenuItem(Localization.Get("menu.skin.win11"));
+        _win11Item.Click += (_, _) => SkinSwitchRequested?.Invoke(this, "win11");
+        _win10Item = new ToolStripMenuItem(Localization.Get("menu.skin.win10"));
+        _win10Item.Click += (_, _) => SkinSwitchRequested?.Invoke(this, "win10");
+        appearance.DropDownItems.Add(_win11Item);
+        appearance.DropDownItems.Add(_win10Item);
+        menu.Items.Add(appearance);
+
+        // The ticks have to be refreshed on every open, not set once at construction: both can
+        // also be changed from the replacement menu or from the command line, and a stale tick
+        // would be worse than none.
+        menu.Opening += (_, _) =>
+        {
+            _startupItem.Checked = StartupRegistration.IsEnabled;
+            _win11Item.Checked = AppSettings.Skin == "win11";
+            _win10Item.Checked = AppSettings.Skin == "win10";
+        };
 
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(Localization.Get("tray.open-log"), null, (_, _) => OpenLog());

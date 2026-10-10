@@ -27,6 +27,9 @@
   <SolidColorBrush x:Key="MenuItemForegroundBrush" Color="#1A1A1A" />
   <SolidColorBrush x:Key="MenuItemHoverBrush" Color="#D9E8F7" />
   <SolidColorBrush x:Key="MenuItemDisabledBrush" Color="#9A9A9A" />
+  <!-- Group label ("Appearance"). Dimmer than a normal row, and deliberately not themed as a
+       disabled entry — it is a caption, not something that failed to become available. -->
+  <SolidColorBrush x:Key="MenuHeadingBrush" Color="#6D6D6D" />
   <SolidColorBrush x:Key="MenuSeparatorBrush" Color="#DCDCDC" />
 
   <DropShadowEffect x:Key="MenuShadowEffect"

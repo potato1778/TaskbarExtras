@@ -29,7 +29,8 @@
                 <TextBlock Text="{Binding CheckGlyph}"
                            Style="{StaticResource MenuTextStyle}"
                            Width="{StaticResource MenuTickColumnWidth}" />
-                <TextBlock Style="{StaticResource MenuTextStyle}"
+                <TextBlock x:Name="Label"
+                           Style="{StaticResource MenuTextStyle}"
                            Text="{Binding DisplayName}" />
               </StackPanel>
             </Border>
@@ -38,6 +39,13 @@
             <DataTrigger Binding="{Binding IsSeparator}" Value="True">
               <Setter TargetName="Row" Property="Visibility" Value="Collapsed" />
               <Setter TargetName="Sep" Property="Visibility" Value="Visible" />
+            </DataTrigger>
+            <!-- A group label: dimmed, no hover fill, not clickable. Dimming via the label's
+                 foreground rather than the row's Opacity so it does not read as a disabled
+                 action the user is being denied. -->
+            <DataTrigger Binding="{Binding IsHeading}" Value="True">
+              <Setter TargetName="Label" Property="Foreground" Value="{StaticResource MenuHeadingBrush}" />
+              <Setter TargetName="Row" Property="IsHitTestVisible" Value="False" />
             </DataTrigger>
             <DataTrigger Binding="{Binding IsEnabled}" Value="False">
               <Setter TargetName="Row" Property="IsEnabled" Value="False" />

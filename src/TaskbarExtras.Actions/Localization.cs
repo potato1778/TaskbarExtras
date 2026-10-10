@@ -41,6 +41,12 @@ public static class Localization
         // app has no main window and its tray icon is usually hidden behind the overflow
         // chevron — so without this there is no discoverable way to quit.
         ["menu.exit"]                 = ("Exit TaskbarExtras",     "退出 TaskbarExtras"),
+
+        // Appearance submenu. The skin names themselves are product names and stay untranslated;
+        // only this heading and the two explanatory lines switch with the language.
+        ["menu.appearance"]           = ("Appearance",             "外观"),
+        ["menu.skin.win11"]           = ("Windows 11 style",       "Windows 11 风格"),
+        ["menu.skin.win10"]           = ("Windows 10 style",       "Windows 10 风格"),
     };
 
     public static Language Current { get; private set; } = DetectFromSystem();
