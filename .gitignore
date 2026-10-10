@@ -14,3 +14,8 @@ publish/
 ## OS
 Thumbs.db
 desktop.ini
+
+## Local secrets — never commit these
+.github-token
+*.token
+.secrets/
