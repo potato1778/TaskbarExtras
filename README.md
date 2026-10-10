@@ -53,7 +53,9 @@ TaskbarExtras.exe --quit              让正在运行的实例退出
 TaskbarExtras.exe --autostart         看是否已设为开机自启
 TaskbarExtras.exe --autostart on|off  开 / 关开机自启
 TaskbarExtras.exe --lang zh|en        强制界面语言（默认跟随系统）
-TaskbarExtras.exe --skin win11|win10  菜单外观（默认 win11）
+TaskbarExtras.exe --skin win11|win10  本次运行的菜单外观
+TaskbarExtras.exe --skin-set win11|win10
+                                      改默认外观并记住（下次启动生效）
 TaskbarExtras.exe --preview           只显示一次菜单，用来预览皮肤
 TaskbarExtras.exe --help              显示说明
 ```
@@ -91,9 +93,22 @@ TaskbarExtras.exe --autostart off
 |---|---|
 | ![win11](docs/screenshot-win11-zh.png) | ![win10](docs/screenshot-win10-zh.png) |
 
+### 怎么切换
+
+**右键任务栏空白处 →「外观」→ 选一个。** 这就是全部操作，选完自己重启。
+
+托盘图标上也有同一个「外观」子菜单。是故意重复的 —— 主菜单能不能弹出来，取决于鼠标钩子有没有挂上；托盘那条路不依赖它，钩子出问题时还能用。
+
+命令行有两个，区别只在记不记住：
+
 ```bash
-TaskbarExtras.exe --preview --skin win10
+TaskbarExtras.exe --skin-set win10    # 改默认，记住，下次启动生效
+TaskbarExtras.exe --skin win10        # 只管这一次，不改默认
 ```
+
+选择存在 `%APPDATA%\TaskbarExtras\settings.json`，重启、关机都还在。
+
+**为什么切换要重启？** 皮肤是菜单窗口构造前合并进去的字典，而窗口里的画刷用的是 `StaticResource` —— 只在加载时解析一次，运行中换字典不会生效。想做成即时切换，得把每个画刷引用都改成 `DynamicResource`。重启大概 300ms，比改一遍 XAML 划算。
 
 两套是按各自年代的实物做的，不是同一套换个颜色：
 
@@ -112,6 +127,7 @@ TaskbarExtras.exe --preview --skin win10
 
 - [ ] 菜单加动画（淡入、滑出）
 - [ ] 做更多样式
+- [ ] 皮肤即时切换（把画刷引用改成 `DynamicResource`，省掉重启）
 - [ ] Windows 10 风格的开始菜单
 - [ ] 恢复磁贴
 
@@ -130,7 +146,7 @@ TaskbarExtras.exe --preview --skin win10
 
 - 只在单屏 150% 缩放上测过。双屏和混合 DPI 没验证。
 - 右键到菜单出来有约 40ms 延迟 —— 鼠标钩子拦下右键再渲染，这个开销消不掉。
-- 没有配置文件，皮肤和语言只能靠命令行参数。
+- 换皮肤要重启进程才能生效（原因见上面「皮肤」一节）。
 - 没做和其他任务栏工具的兼容，一起装可能打架。
 - 区分「右键的是任务栏空白处还是应用按钮」要靠 UI Automation（Windows 11 的任务按钮是 XAML 画的，位置不在窗口树里）。它每秒刷新一次快照。万一 UIA 读不到，会退回旧的窗口树判定，那种情况下在 Windows 11 上可能误判。
 - 字母快捷键要求菜单能拿到键盘焦点。绝大多数情况没问题；万一拿不到（日志里会写一行警告），字母不响应，但鼠标点击照常。

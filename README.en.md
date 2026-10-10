@@ -53,7 +53,10 @@ TaskbarExtras.exe --quit              ask a running instance to stop
 TaskbarExtras.exe --autostart         report whether it starts at sign-in
 TaskbarExtras.exe --autostart on|off  turn that on or off
 TaskbarExtras.exe --lang zh|en        force the UI language (defaults to your system)
-TaskbarExtras.exe --skin win11|win10  menu appearance (defaults to win11)
+TaskbarExtras.exe --skin win11|win10  menu appearance for this run only
+TaskbarExtras.exe --skin-set win11|win10
+                                      change the default and remember it
+                                      (takes effect on the next launch)
 TaskbarExtras.exe --preview           show the menu once, for trying out a skin
 TaskbarExtras.exe --help              print this
 ```
@@ -91,14 +94,27 @@ Everything the menu looks like lives in a `ResourceDictionary`. A new skin is a 
 |---|---|
 | ![win11](docs/screenshot-win11-en.png) | ![win10](docs/screenshot-win10-en.png) |
 
-```bash
-TaskbarExtras.exe --preview --skin win10
-```
-
 The two are modelled on the real thing from their own era rather than being one design recoloured:
 
 - **win11**: near-white card, 8 px corners, soft shadow, neutral grey hover.
 - **win10**: flat `#F2F2F2`, **square corners**, a darker grey border, and the shortcut letter written into the label — `Task Manager(K)`. **Those letters actually work**; they are not decoration.
+
+### Switching
+
+**Right-click the empty taskbar → Appearance → pick one.** That's the whole procedure; it restarts itself.
+
+The tray icon carries the same Appearance submenu. That duplication is deliberate — whether the main menu opens at all depends on the mouse hook having installed, and the tray route does not.
+
+Two command-line flags, differing only in whether they remember:
+
+```bash
+TaskbarExtras.exe --skin-set win10    # change the default and remember it
+TaskbarExtras.exe --skin win10        # this run only, default untouched
+```
+
+The choice is stored in `%APPDATA%\TaskbarExtras\settings.json` and survives restarts.
+
+**Why does switching restart the process?** The skin is a dictionary merged in before the menu window is constructed, and the window's brushes reference it with `StaticResource` — resolved once at load, so swapping the dictionary underneath a live window does nothing. A switch in place would mean converting every brush reference to `DynamicResource`. A restart costs about 300 ms.
 
 ## Two rules
 
@@ -112,6 +128,7 @@ The reason is practical: tools built on injection have to be rewritten every tim
 
 - [ ] Animate the menu (fade in, slide out)
 - [ ] More skins
+- [ ] Switch skins in place (convert the brush references to `DynamicResource`, drop the restart)
 - [ ] A Windows 10 style Start menu
 - [ ] Live tiles
 
@@ -124,7 +141,7 @@ The reason is practical: tools built on injection have to be rewritten every tim
 
 - Only tested on a single 150%-scaled display. Dual monitors and mixed DPI are unverified.
 - About 40 ms between the right-click and the menu appearing — swallowing the click and then rendering can't be made free.
-- No config file. Skin and language are command-line only.
+- Changing skins restarts the process (see Skins above for why).
 - No compatibility handling for other taskbar tools; running them side by side may fight.
 - Telling "empty taskbar" apart from "an app button" needs UI Automation, because Windows 11 draws the task buttons with XAML and their positions exist nowhere in the window tree. The snapshot is rebuilt once a second. If UIA ever comes up empty it falls back to the old window-tree test, which can misjudge on Windows 11.
 - The letter shortcuts need the menu to hold keyboard focus. That works in practice; if it ever does not (the log says so), the letters go quiet while clicking still works.

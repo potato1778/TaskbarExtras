@@ -626,6 +626,32 @@ Win7 的 Aero 玻璃用 `DwmEnableBlurBehindWindow`。**这个 API 从 Windows 8
 
 **决策：Win7 Aero 皮肤先用 `DWMWA_SYSTEMBACKDROP_TYPE` + 静态渐变模拟。** 不引入未文档化 API —— 这是本项目的核心原则，皮肤不能破例。
 
+### 7.4 切换皮肤：为什么是重启而不是热切换（2026-10-10）
+
+皮肤加载发生在菜单窗口构造之前 —— `Current.Resources.MergedDictionaries` 先合并字典，再 `new ClassicMenuWindow()`。窗口里的画刷全是 `StaticResource`：
+
+```xml
+<Border Background="{StaticResource MenuBackgroundBrush}" ... />
+```
+
+`StaticResource` **只在加载时解析一次**，之后绑的就是那个具体的画刷对象。运行中把 `MergedDictionaries` 清掉换成另一套，已构造的窗口完全不受影响 —— 不报错，也没变化，是最难查的那种失败。
+
+三条路，选了第三条：
+
+| 方案 | 代价 | 结论 |
+|---|---|---|
+| 全局改 `DynamicResource` | 每个画刷引用都要改；`DynamicResource` 解析比 `StaticResource` 慢，而这个菜单要在钩子回调的 300ms 预算里渲染出来 | 为一个几乎不会被点的设置，给每次右键都加成本 |
+| 销毁窗口重建 | `Window` 重建 + 重新 `Show()`，还要处理托盘图标、钩子、单实例锁的归属 | 状态机复杂度暴涨 |
+| **重启进程** | 约 300ms，一次 | ✅ |
+
+重启还有个好处：它是**诚实的**。热切换如果哪里没覆盖到，用户看到的是「点了一下，一半变了」；重启则保证新皮肤走过的路径和刚开机时完全一致。
+
+`--skin`（本次运行）和 `--skin-set`（记住）分开，是因为前者是调试用的、后者才是用户设置。合并成一个的话，「我就想看一眼 win10 长什么样」会永久改掉默认值。
+
+**顺带解决了「设置活不过进程」的问题。** 在这之前 `--skin` 只在启动时读一次，进程一退就没了 —— 等于根本没有切换功能。现在写 `%APPDATA%\TaskbarExtras\settings.json`（skin + language，普通 JSON，文件损坏等同于不存在），`OnStartup` 里第一件事就是 `AppSettings.Load()`，因为语言和皮肤两个参数都要查它。
+
+优先级：**命令行 > 存储值 > 默认值**。`SkinFromArguments` 无参数时返回 `null` 而不是默认值 —— 这样 `ApplySkin` 才能区分「用户明确要 win11」和「用户什么都没说」，否则命令行永远无法覆盖存储的 win10。
+
 ---
 
 ## 8. 多显示器与 DPI
@@ -656,7 +682,28 @@ Win7 的 Aero 玻璃用 `DwmEnableBlurBehindWindow`。**这个 API 从 Windows 8
 
 ## 9. 配置
 
-`%APPDATA%\TaskbarExtras\config.json`（`System.Text.Json`，带 schema 版本号便于将来迁移）
+### 9.0 现状：`settings.json`（已实现，2026-10-10）
+
+实际落地的是最小可用版本，路径 `%APPDATA%\TaskbarExtras\settings.json`：
+
+```json
+{
+  "Skin": "win11",
+  "Language": null
+}
+```
+
+用 `System.Text.Json`，手写 `Model` 类。`null` 的 `Language` 表示「跟随系统」，与「用户选了 zh」区分开。
+
+三个刻意的选择：
+
+- **文件损坏等同于文件不存在。** 反序列化抛异常就吞掉、用默认值启动。配置文件不该让程序起不来 —— 用户手改坏了 JSON 是常见情况，而这只是个换皮肤的选项。
+- **`Save()` 返回 `bool`。** 写失败（磁盘满、权限）不是致命的，但不能假装成功。调用方把结果打到日志和 `--skin-set` 的输出里。
+- **没有 `schemaVersion`。** 下面那个 §9 的设计里写了，但两个字段的配置不值得版本号 —— 加字段时旧文件缺字段默认值就是对的，加字段本身也不会破坏。等真的要做破坏性迁移时再引入，那时才知道该迁移什么。
+
+**不做**（评估后放弃，理由留档）：`items` 自定义菜单项数组。它要求整个菜单从「代码里写死的八项」变成「数据驱动」，而现有 8 项里有一半要查询实时状态（自启状态、皮肤状态、UIA 快照），数据驱动反而更绕。等真的有人要这个功能再说。
+
+### 9.0.1 原设计（未实现，保留供参考）
 
 ```jsonc
 {
