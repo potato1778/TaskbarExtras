@@ -120,6 +120,11 @@ TaskbarExtras.exe --preview --skin win10
 - **恢复 Windows 10 风格的系统托盘区（小图标）** —— Windows 11 的托盘是 XAML 画的，
   没有文档化接口能改它的图标尺寸，也读不到图标图像。要做只能注入 explorer 或自己重画整条任务栏，
   两条路都超出这个项目的定位。实测数据在 [docs/DESIGN.md](docs/DESIGN.md) §8.5。
+- **拆开 Windows 11 的快速设置面板**（把 WLAN / 蓝牙 / 电量 / 音量变回各自独立的小图标 + 小面板）
+  —— 这个面板是 XAML island，整个 UIA 子树里只有它自己一个元素，**连它有哪些控件都读不到**，
+  没有任何地址可以去改。想「分开」得自己重新实现那四个 flyout。
+  不过 Windows 本身留了口子：把系统托盘图标设成「单独显示」，点开的**就是 Win10 那种单功能小面板**。
+  实测数据在 [docs/DESIGN.md](docs/DESIGN.md) §8.6。
 
 ## 已知问题
 

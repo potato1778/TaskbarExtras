@@ -118,6 +118,7 @@ The reason is practical: tools built on injection have to be rewritten every tim
 ### Not doing
 
 - **A Windows 10 style system tray (small icons).** Windows 11 draws the tray with XAML. No documented API changes its icon size, and the icon bitmaps cannot be read back out. The only ways in are injecting into explorer or redrawing the whole taskbar — neither fits this project. Measurements in [docs/DESIGN.md](docs/DESIGN.md) §8.5.
+- **Splitting up the Windows 11 Quick Settings panel** (WLAN / Bluetooth / battery / volume as separate small icons with their own flyouts). It is a XAML island whose whole UI Automation subtree contains exactly one element — itself. There is nowhere to even read what controls it has, let alone restyle them. Windows does leave a door open though: set a tray icon to "show separately" and clicking it opens the old single-purpose flyout. Measurements in [docs/DESIGN.md](docs/DESIGN.md) §8.6.
 
 ## Known issues
 
