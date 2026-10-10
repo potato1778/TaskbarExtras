@@ -151,8 +151,9 @@ public partial class ClassicMenuWindow : Window
         var items = new List<MenuItemViewModel>();
         foreach (var action in _registry.All)
         {
-            // A separator before the "settings" style entry, mirroring the Windows 10 menu.
-            if (action.Id == "taskbar-settings") items.Add(MenuItemViewModel.Separator());
+            // A separator above "Show desktop", which closes the window-arranging group. The
+            // settings row follows it with no break of its own, so the two read as one tail.
+            if (action.Id == "show-desktop") items.Add(MenuItemViewModel.Separator());
             items.Add(MenuItemViewModel.From(action, withMnemonic));
         }
 

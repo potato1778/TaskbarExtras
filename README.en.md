@@ -24,17 +24,19 @@ Right-click the taskbar's empty background:
 
 | | |
 |---|---|
-| Show desktop | Minimise everything; click again to restore |
 | Task Manager | |
 | Cascade windows | |
 | Show windows stacked | |
 | Show windows side by side | |
+| Show desktop | Minimise everything; click again to restore |
 | Taskbar settings | |
 | Start at sign-in | Checkable; click to toggle |
 | Appearance | Windows 11 / Windows 10 style; click to switch and restart |
 | Exit TaskbarExtras | |
 
-The first six are the Windows 10 originals, in the original order. **Appearance / Start at sign-in / Exit** did not exist there (Windows 10 started itself from Settings, and quitting meant killing the process), so they sit below the separator at the bottom and leave the six rows above alone.
+The first six are this app's own version of the Windows 10 taskbar menu, in two groups: the first four **rearrange windows that are already open**, and the pair below the separator is something else — one hides them all, the other is a settings entry point. **Appearance / Start at sign-in / Exit** did not exist in Windows 10 (it started itself from Settings, and quitting meant killing the process), so they sit at the very bottom below the last separator.
+
+> A word about fidelity: Windows 10's real taskbar menu is `Toolbars / Search / Show Task View button / Show open windows / Task Manager / Lock the taskbar / Properties` — it manages **system toggles** and contains no window-arranging items at all. What this app implements is the window-arranging set, closer to the Windows 7 era taskbar menu. The two do not correspond item for item; that is a deliberate choice about function, not an oversight.
 
 Only the **empty** part of the taskbar is intercepted. Right-clicking Start still gives you Win+X, right-clicking a task button still gives you its jump list, right-clicking a tray icon still gives you its own menu. None of that is touched.
 

@@ -51,15 +51,24 @@ public sealed class ActionRegistry
 
     public IAction? Find(string id) => _byId.GetValueOrDefault(id);
 
-    /// <summary>The default menu, in the same order the Windows 10 taskbar used.</summary>
+    /// <summary>
+    /// The default menu.
+    ///
+    /// <para>
+    /// The window-arranging four come first, then Show desktop, then the settings row. Show desktop
+    /// sits on its own between them rather than at the top: it is a different kind of thing from
+    /// cascade/stack/side-by-side (which rearrange what is already open, while it hides everything),
+    /// and the separator <c>Rebuild()</c> inserts before the settings row gives it a natural edge.
+    /// </para>
+    /// </summary>
     public static ActionRegistry CreateDefault()
     {
         var registry = new ActionRegistry();
-        registry.Register(new ShowDesktopAction());
         registry.Register(new TaskManagerAction());
         registry.Register(new CascadeWindowsAction());
         registry.Register(new TileHorizontallyAction());
         registry.Register(new TileVerticallyAction());
+        registry.Register(new ShowDesktopAction());
         registry.Register(new TaskbarSettingsAction());
         return registry;
     }
