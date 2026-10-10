@@ -24,8 +24,13 @@ public partial class ClassicMenuWindow : Window
     /// Extra rows appended at the bottom, supplied by the host. A factory rather than a list, so
     /// the rows are rebuilt on every open — which keeps their labels in step with the language
     /// and leaves room for dynamic content later.
+    ///
+    /// <para>
+    /// The argument is the skin's "show mnemonics" flag, passed through so the host does not have
+    /// to go looking for the same resource.
+    /// </para>
     /// </summary>
-    public Func<IReadOnlyList<MenuItemViewModel>>? ExtraItemsFactory { get; set; }
+    public Func<bool, IReadOnlyList<MenuItemViewModel>>? ExtraItemsFactory { get; set; }
 
     public ClassicMenuWindow(ActionRegistry registry)
     {
@@ -97,19 +102,41 @@ public partial class ClassicMenuWindow : Window
 
         Opacity = 1;
         Activate();
+
+        // Focus, not just Activate: the menu has no focusable content, so without this WPF has no
+        // focused element and key events have nowhere to route from — which is exactly how the
+        // mnemonic keys silently did nothing the first time they were tested.
+        Focus();
+
+        // Windows only delivers keystrokes to the foreground window, so if the menu did not
+        // actually come forward the letters cannot work. Logged rather than worked around: the
+        // usual fix (AttachThreadInput) is invasive, and this has not been seen to fail yet.
+        if (!IsActive) Log.Write("警告：菜单未取得前台焦点，字母键可能不生效");
     }
+
+    /// <summary>
+    /// True when the current skin writes mnemonics into the labels.
+    ///
+    /// <para>
+    /// Windows 11 menus have no bracketed letters and Windows 10 menus do, so this belongs to the
+    /// skin rather than to the actions. The key bindings work either way — a shortcut you cannot
+    /// see is still a shortcut, and hiding the hint is a visual choice, not a functional one.
+    /// </para>
+    /// </summary>
+    private bool ShowMnemonics => TryFindResource("MenuShowMnemonics") is bool flag && flag;
 
     private void Rebuild()
     {
+        var withMnemonic = ShowMnemonics;
         var items = new List<MenuItemViewModel>();
         foreach (var action in _registry.All)
         {
             // A separator before the "settings" style entry, mirroring the Windows 10 menu.
             if (action.Id == "taskbar-settings") items.Add(MenuItemViewModel.Separator());
-            items.Add(MenuItemViewModel.From(action));
+            items.Add(MenuItemViewModel.From(action, withMnemonic));
         }
 
-        var extras = ExtraItemsFactory?.Invoke();
+        var extras = ExtraItemsFactory?.Invoke(withMnemonic);
         if (extras is { Count: > 0 })
         {
             items.Add(MenuItemViewModel.Separator());
@@ -127,26 +154,61 @@ public partial class ClassicMenuWindow : Window
         Hide();
         // Run after the menu is gone so the action's window changes are not fighting our own
         // Deactivated/Activate cycle.
-        Dispatcher.BeginInvoke(new Action(() =>
+        Dispatcher.BeginInvoke(new Action(() => Run(vm)));
+    }
+
+    /// <summary>
+    /// Runs a row, logging rather than throwing: a failed action must not take the app down while
+    /// the user is in the middle of something.
+    /// </summary>
+    private static void Run(MenuItemViewModel vm)
+    {
+        try
         {
-            try
-            {
-                if (vm.Invoke is { } invoke) invoke();
-                else if (vm.Action is { } action) action.Execute();
-            }
-            catch (Exception ex)
-            {
-                Log.Write($"菜单项执行失败: {ex.Message}");
-            }
-        }));
+            if (vm.Invoke is { } invoke) invoke();
+            else if (vm.Action is { } action) action.Execute();
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"菜单项执行失败: {ex.Message}");
+        }
     }
 
     private void OnDeactivated(object? sender, EventArgs e) => Hide();
 
     private void OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (e.Key == Key.Escape) Hide();
+        // Alt+letter arrives as Key.System with the real key tucked into SystemKey. Windows
+        // writes its mnemonics for Alt, so handling this is the difference between the letters
+        // working and merely looking like they should.
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+
+        if (key == Key.Escape)
+        {
+            Hide();
+            e.Handled = true;
+            return;
+        }
+
+        // Windows has put letters on taskbar menu rows since Windows 95; honouring them is what
+        // makes the bracketed letters in the Windows 10 skin honest rather than decorative.
+        var pressed = ToMnemonic(key);
+        if (pressed == '\0') return;
+
+        foreach (var item in ItemsHost.ItemsSource?.Cast<MenuItemViewModel>() ?? [])
+        {
+            if (item.Mnemonic != pressed || !item.IsEnabled) continue;
+
+            Hide();
+            Dispatcher.BeginInvoke(new Action(() => Run(item)));
+            e.Handled = true;
+            return;
+        }
     }
+
+    /// <summary>Key.A..Key.Z are contiguous, so a plain offset works.</summary>
+    private static char ToMnemonic(Key key) =>
+        key is >= Key.A and <= Key.Z ? (char)('A' + (key - Key.A)) : '\0';
 
     /// <summary>Physical-pixel rect of the menu while it is on screen, otherwise null.</summary>
     public ScreenRect? GetScreenRectOrNull()

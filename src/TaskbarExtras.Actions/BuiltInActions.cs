@@ -22,6 +22,7 @@ public sealed class ShowDesktopAction : IAction
     public string Id => "show-desktop";
     public string DisplayName => Localization.Get("action.show-desktop");
     public string IconKey => "show-desktop";
+    public char Mnemonic => 'D';   // Desktop
 
     public bool CanExecute() => true;
 
@@ -37,6 +38,7 @@ public sealed class TaskManagerAction : IAction
     public string Id => "task-manager";
     public string DisplayName => Localization.Get("action.task-manager");
     public string IconKey => "task-manager";
+    public char Mnemonic => 'K';   // tasK — Windows 10 uses K here, not T
 
     public bool CanExecute() => true;
 
@@ -61,6 +63,7 @@ public sealed class CascadeWindowsAction : IAction
     public string Id => "cascade-windows";
     public string DisplayName => Localization.Get("action.cascade-windows");
     public string IconKey => "cascade";
+    public char Mnemonic => 'C';   // Cascade
     public bool CanExecute() => WindowEnumerator.GetAppWindows().Count > 1;
     public bool Execute() => ShellDispatch.CascadeWindows();
 }
@@ -70,6 +73,7 @@ public sealed class TileHorizontallyAction : IAction
     public string Id => "tile-horizontally";
     public string DisplayName => Localization.Get("action.tile-horizontally");
     public string IconKey => "tile-h";
+    public char Mnemonic => 'S';   // Stacked
     public bool CanExecute() => WindowEnumerator.GetAppWindows().Count > 1;
     public bool Execute() => ShellDispatch.TileHorizontally();
 }
@@ -79,6 +83,7 @@ public sealed class TileVerticallyAction : IAction
     public string Id => "tile-vertically";
     public string DisplayName => Localization.Get("action.tile-vertically");
     public string IconKey => "tile-v";
+    public char Mnemonic => 'I';   // sIde by side — same letter Windows 7 used
     public bool CanExecute() => WindowEnumerator.GetAppWindows().Count > 1;
     public bool Execute() => ShellDispatch.TileVertically();
 }
@@ -88,6 +93,7 @@ public sealed class TaskbarSettingsAction : IAction
     public string Id => "taskbar-settings";
     public string DisplayName => Localization.Get("action.taskbar-settings");
     public string IconKey => "settings";
+    public char Mnemonic => 'P';   // Properties — the row Windows 10 put at the bottom
 
     public bool CanExecute() => true;
 

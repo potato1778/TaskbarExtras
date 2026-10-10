@@ -95,6 +95,11 @@ Everything the menu looks like lives in a `ResourceDictionary`. A new skin is a 
 TaskbarExtras.exe --preview --skin win10
 ```
 
+The two are modelled on the real thing from their own era rather than being one design recoloured:
+
+- **win11**: near-white card, 8 px corners, soft shadow, neutral grey hover.
+- **win10**: flat `#F2F2F2`, **square corners**, a darker grey border, and the shortcut letter written into the label — `Task Manager(K)`. **Those letters actually work**; they are not decoration.
+
 ## Two rules
 
 **Nothing gets injected.** No DLL into `explorer.exe`, no patching, no touching system files. It's an ordinary process. Close it and nothing is left behind.
@@ -118,6 +123,7 @@ The reason is practical: tools built on injection have to be rewritten every tim
 - No config file. Skin and language are command-line only.
 - No compatibility handling for other taskbar tools; running them side by side may fight.
 - Telling "empty taskbar" apart from "an app button" needs UI Automation, because Windows 11 draws the task buttons with XAML and their positions exist nowhere in the window tree. The snapshot is rebuilt once a second. If UIA ever comes up empty it falls back to the old window-tree test, which can misjudge on Windows 11.
+- The letter shortcuts need the menu to hold keyboard focus. That works in practice; if it ever does not (the log says so), the letters go quiet while clicking still works.
 
 ## Licence
 

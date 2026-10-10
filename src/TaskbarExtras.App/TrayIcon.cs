@@ -1,4 +1,6 @@
 using System.Drawing;
+using System.IO;
+using System.Text;
 using System.Windows.Forms;
 using TaskbarExtras.Actions;
 using TaskbarExtras.Shell;
@@ -76,10 +78,34 @@ public sealed class TrayIcon : IDisposable
     /// cannot find the icon, they cannot quit the app — which is exactly what happened the first
     /// time this shipped.
     /// </para>
+    /// <para>
+    /// Drawn at several sizes rather than once at 32x32. Windows asks for 16 px in a 100% tray,
+    /// 24 px at 150%, 32 px for large icons — and when it is handed a single bitmap for all of
+    /// those it resamples, which turns a three-bar glyph into mush at the small end. Supplying
+    /// each size lets it pick an exact frame instead.
+    /// </para>
     /// </summary>
     private static Icon CreateIcon()
     {
-        const int size = 32;
+        (int Size, byte[] Png)[] frames =
+        [
+            (16, RenderIconPng(16)),
+            (20, RenderIconPng(20)),
+            (24, RenderIconPng(24)),
+            (32, RenderIconPng(32)),
+            (48, RenderIconPng(48)),
+        ];
+        return IconFromPngFrames(frames);
+    }
+
+    /// <summary>
+    /// Draws the glyph at one size. Everything is expressed against a 32 px design grid and
+    /// scaled, so the shapes stay proportional instead of drifting at small sizes.
+    /// </summary>
+    private static byte[] RenderIconPng(int size)
+    {
+        var k = size / 32f;
+
         using var bitmap = new Bitmap(size, size);
         using (var g = Graphics.FromImage(bitmap))
         {
@@ -87,39 +113,69 @@ public sealed class TrayIcon : IDisposable
             g.Clear(Color.Transparent);
 
             using var plate = new SolidBrush(Color.FromArgb(255, 32, 32, 32));
-            using var path = RoundedRect(new Rectangle(1, 1, size - 2, size - 2), 7);
+            using var path = RoundedRect(1 * k, 1 * k, 30 * k, 30 * k, 7 * k);
             g.FillPath(plate, path);
 
             // Three stacked bars: a taskbar with its menu open.
             using var bar = new SolidBrush(Color.FromArgb(255, 242, 242, 242));
             using var accent = new SolidBrush(Color.FromArgb(255, 96, 165, 250));
-            g.FillRectangle(bar, 7f, 8.5f, 18f, 3.5f);
-            g.FillRectangle(bar, 7f, 14.5f, 18f, 3.5f);
-            g.FillRectangle(accent, 7f, 20.5f, 11f, 3.5f);
+            g.FillRectangle(bar, 7 * k, 8.5f * k, 18 * k, 3.5f * k);
+            g.FillRectangle(bar, 7 * k, 14.5f * k, 18 * k, 3.5f * k);
+            g.FillRectangle(accent, 7 * k, 20.5f * k, 11 * k, 3.5f * k);
         }
 
-        var handle = bitmap.GetHicon();
-        try
-        {
-            // Clone so the returned Icon owns private data, then free the GDI handle immediately —
-            // FromHandle does not take ownership and nothing else would release it.
-            using var fromHandle = Icon.FromHandle(handle);
-            return (Icon)fromHandle.Clone();
-        }
-        finally
-        {
-            IconInterop.DestroyIcon(handle);
-        }
+        using var stream = new MemoryStream();
+        bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
+        return stream.ToArray();
     }
 
-    private static System.Drawing.Drawing2D.GraphicsPath RoundedRect(Rectangle r, int radius)
+    /// <summary>
+    /// Assembles a multi-size .ico in memory.
+    ///
+    /// <para>
+    /// PNG-compressed frames are used rather than the older BMP-with-masks form: every Windows
+    /// this app runs on understands them, and it avoids hand-writing a BITMAPINFOHEADER plus the
+    /// two colour masks per frame. The header is the documented ICONDIR/ICONDIRENTRY layout.
+    /// </para>
+    /// </summary>
+    private static Icon IconFromPngFrames((int Size, byte[] Png)[] frames)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write((ushort)0);                 // reserved
+            writer.Write((ushort)1);                 // 1 = icon (2 would be a cursor)
+            writer.Write((ushort)frames.Length);
+
+            var offset = 6 + 16 * frames.Length;
+            foreach (var (size, png) in frames)
+            {
+                writer.Write((byte)size);            // 0 means 256; none of ours are that big
+                writer.Write((byte)size);
+                writer.Write((byte)0);               // palette entries
+                writer.Write((byte)0);               // reserved
+                writer.Write((ushort)1);             // colour planes
+                writer.Write((ushort)32);            // bits per pixel
+                writer.Write(png.Length);
+                writer.Write(offset);
+                offset += png.Length;
+            }
+
+            foreach (var (_, png) in frames) writer.Write(png);
+        }
+
+        stream.Position = 0;
+        return new Icon(stream);
+    }
+
+    private static System.Drawing.Drawing2D.GraphicsPath RoundedRect(float x, float y, float w, float h, float radius)
     {
         var path = new System.Drawing.Drawing2D.GraphicsPath();
         var d = radius * 2;
-        path.AddArc(r.X, r.Y, d, d, 180, 90);
-        path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
-        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
-        path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+        path.AddArc(x, y, d, d, 180, 90);
+        path.AddArc(x + w - d, y, d, d, 270, 90);
+        path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
+        path.AddArc(x, y + h - d, d, d, 90, 90);
         path.CloseFigure();
         return path;
     }

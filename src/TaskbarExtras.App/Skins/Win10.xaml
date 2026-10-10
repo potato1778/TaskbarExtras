@@ -12,15 +12,18 @@
   <sys:Double x:Key="MenuItemHeight">28</sys:Double>
   <Thickness x:Key="MenuPadding">2</Thickness>
   <Thickness x:Key="MenuItemPadding">10,0,24,0</Thickness>
-  <CornerRadius x:Key="MenuCornerRadius">2</CornerRadius>
+  <!-- Square. Measured off a real Windows 10 taskbar menu: no corner rounding at all. -->
+  <CornerRadius x:Key="MenuCornerRadius">0</CornerRadius>
   <!-- Width of the tick column on checkable rows. Present on every row so labels line up. -->
   <sys:Double x:Key="MenuTickColumnWidth">16</sys:Double>
+  <!-- Windows 10 writes the shortcut into the label ("Task Manager(K)"). Windows 11 does not. -->
+  <sys:Boolean x:Key="MenuShowMnemonics">True</sys:Boolean>
   <Thickness x:Key="MenuBorderMargin">6</Thickness>
   <sys:Double x:Key="MenuFontSize">12.5</sys:Double>
 
   <!-- Brushes: Windows 10 flat / light -->
   <SolidColorBrush x:Key="MenuBackgroundBrush" Color="#F2F2F2" />
-  <SolidColorBrush x:Key="MenuBorderBrush" Color="#C8C8C8" />
+  <SolidColorBrush x:Key="MenuBorderBrush" Color="#ACACAC" />
   <SolidColorBrush x:Key="MenuItemForegroundBrush" Color="#1A1A1A" />
   <SolidColorBrush x:Key="MenuItemHoverBrush" Color="#D9E8F7" />
   <SolidColorBrush x:Key="MenuItemDisabledBrush" Color="#9A9A9A" />

@@ -4,15 +4,27 @@ namespace TaskbarExtras.App;
 
 /// <summary>
 /// One row in the menu. Either wraps an <see cref="IAction"/>, is a separator, or is an
-/// app-level command supplied by the host (see <see cref="Command"/>).
+/// app-level command supplied by the host (see <see cref="Toggle"/> / <see cref="Command"/>).
 /// </summary>
 public sealed class MenuItemViewModel
 {
     public IAction? Action { get; private init; }
     public bool IsSeparator { get; private init; }
 
+    /// <summary>
+    /// The final text to render, mnemonic suffix already included when the skin wants one.
+    /// Composed here rather than in the template so the skin switch lives in one place.
+    /// </summary>
+    public string DisplayName { get; private init; } = string.Empty;
+
+    /// <summary>
+    /// Key that activates this row while the menu is open, or <c>'\0'</c> for none. The suffix is
+    /// only <i>shown</i> when the skin asks for it — Windows 11 menus have no mnemonics, Windows
+    /// 10 ones do — but the key stays bound either way.
+    /// </summary>
+    public char Mnemonic { get; private init; }
+
     /// <summary>Set only for host-supplied rows, which have no <see cref="IAction"/>.</summary>
-    public string? Label { get; private init; }
     public Action? Invoke { get; private init; }
 
     /// <summary>
@@ -26,11 +38,14 @@ public sealed class MenuItemViewModel
     /// <summary>Tick glyph, or empty when this row is not a checked toggle.</summary>
     public string CheckGlyph => IsToggle && IsChecked ? "\u2713" : string.Empty;
 
-    public string DisplayName => Label ?? Action?.DisplayName ?? string.Empty;
-
     public bool IsEnabled => Invoke is not null || (Action?.CanExecute() ?? false);
 
-    public static MenuItemViewModel From(IAction action) => new() { Action = action };
+    public static MenuItemViewModel From(IAction action, bool withMnemonic) => new()
+    {
+        Action = action,
+        Mnemonic = action.Mnemonic,
+        DisplayName = Compose(action.DisplayName, action.Mnemonic, withMnemonic)
+    };
 
     public static MenuItemViewModel Separator() => new() { IsSeparator = true };
 
@@ -43,14 +58,32 @@ public sealed class MenuItemViewModel
     /// next time the menu is opened instead of being remembered wrongly.
     /// </para>
     /// </summary>
-    public static MenuItemViewModel Toggle(string label, bool isChecked, Action invoke) =>
-        new() { Label = label, Invoke = invoke, IsToggle = true, IsChecked = isChecked };
+    public static MenuItemViewModel Toggle(
+        string label, char mnemonic, bool isChecked, bool withMnemonic, Action invoke) => new()
+    {
+        DisplayName = Compose(label, mnemonic, withMnemonic),
+        Mnemonic = mnemonic,
+        Invoke = invoke,
+        IsToggle = true,
+        IsChecked = isChecked
+    };
 
     /// <summary>
     /// A row that is not a shell action. Used for "Exit TaskbarExtras": quitting the app is not
     /// something the Windows 10 taskbar menu could do, so it does not belong in the action
     /// registry — but this app has no main window, so the user still needs a way out.
     /// </summary>
-    public static MenuItemViewModel Command(string label, Action invoke) =>
-        new() { Label = label, Invoke = invoke };
+    public static MenuItemViewModel Command(string label, char mnemonic, bool withMnemonic, Action invoke) => new()
+    {
+        DisplayName = Compose(label, mnemonic, withMnemonic),
+        Mnemonic = mnemonic,
+        Invoke = invoke
+    };
+
+    /// <summary>
+    /// "Show desktop" + 'D' becomes "Show desktop(D)". No space before the bracket — that is how
+    /// Windows writes it.
+    /// </summary>
+    private static string Compose(string label, char mnemonic, bool withMnemonic) =>
+        withMnemonic && mnemonic != '\0' ? $"{label}({mnemonic})" : label;
 }

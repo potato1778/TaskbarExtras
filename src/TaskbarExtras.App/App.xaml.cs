@@ -73,13 +73,14 @@ public partial class App : System.Windows.Application
             // shell actions. But this app has no main window and its tray icon is usually hidden
             // behind the overflow chevron, so the menu the user already opens is the only place
             // they will ever look for them.
-            ExtraItemsFactory = () => new[]
+            ExtraItemsFactory = withMnemonic => new[]
             {
                 MenuItemViewModel.Toggle(
-                    Localization.Get("menu.startup"),
-                    StartupRegistration.IsEnabled,
-                    ToggleStartup),
-                MenuItemViewModel.Command(Localization.Get("menu.exit"), () => Shutdown())
+                    Localization.Get("menu.startup"), 'A',   // Autostart
+                    StartupRegistration.IsEnabled, withMnemonic, ToggleStartup),
+                MenuItemViewModel.Command(
+                    Localization.Get("menu.exit"), 'X',      // eXit
+                    withMnemonic, () => Shutdown())
             }
         };
 

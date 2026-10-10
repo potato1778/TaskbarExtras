@@ -20,6 +20,9 @@
   <CornerRadius x:Key="MenuCornerRadius">8</CornerRadius>
   <!-- Width of the tick column on checkable rows. Present on every row so labels line up. -->
   <sys:Double x:Key="MenuTickColumnWidth">18</sys:Double>
+  <!-- Windows 11 context menus carry no bracketed shortcut letters. The keys still work; the
+       hint is simply not shown, which is what Windows 11 does too. -->
+  <sys:Boolean x:Key="MenuShowMnemonics">False</sys:Boolean>
   <!-- Transparent room around the card for the drop shadow. The window is this much bigger than
        the visible menu, which is why ClassicMenuWindow reads this value back when positioning. -->
   <Thickness x:Key="MenuBorderMargin">8</Thickness>
