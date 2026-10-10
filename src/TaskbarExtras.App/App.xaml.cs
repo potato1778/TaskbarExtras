@@ -86,6 +86,11 @@ public partial class App : System.Windows.Application
             // they will ever look for them.
             ExtraItemsFactory = withMnemonic => new[]
             {
+                // Everything below the Win10 six, at the bottom. Windows 10's own menu had none of
+                // these, so they stay out of the way and keep the six rows above untouched.
+                MenuItemViewModel.Toggle(
+                    Localization.Get("menu.startup"), 'A',   // Autostart
+                    StartupRegistration.IsEnabled, withMnemonic, ToggleStartup),
                 MenuItemViewModel.Heading(Localization.Get("menu.appearance"), withMnemonic),
                 MenuItemViewModel.Radio(
                     Localization.Get("menu.skin.win11"), '1',   // keyed 1 / 2: no letters free, and
@@ -95,10 +100,6 @@ public partial class App : System.Windows.Application
                     Localization.Get("menu.skin.win10"), '2',
                     AppSettings.Skin == "win10", withMnemonic,
                     () => SwitchSkin("win10")),
-                MenuItemViewModel.Separator(),
-                MenuItemViewModel.Toggle(
-                    Localization.Get("menu.startup"), 'A',   // Autostart
-                    StartupRegistration.IsEnabled, withMnemonic, ToggleStartup),
                 MenuItemViewModel.Command(
                     Localization.Get("menu.exit"), 'X',      // eXit
                     withMnemonic, () => Shutdown())

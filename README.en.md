@@ -31,7 +31,10 @@ Right-click the taskbar's empty background:
 | Show windows side by side | |
 | Taskbar settings | |
 | Start at sign-in | Checkable; click to toggle |
+| Appearance | Windows 11 / Windows 10 style; click to switch and restart |
 | Exit TaskbarExtras | |
+
+The first six are the Windows 10 originals, in the original order. **Appearance / Start at sign-in / Exit** did not exist there (Windows 10 started itself from Settings, and quitting meant killing the process), so they sit below the separator at the bottom and leave the six rows above alone.
 
 Only the **empty** part of the taskbar is intercepted. Right-clicking Start still gives you Win+X, right-clicking a task button still gives you its jump list, right-clicking a tray icon still gives you its own menu. None of that is touched.
 
