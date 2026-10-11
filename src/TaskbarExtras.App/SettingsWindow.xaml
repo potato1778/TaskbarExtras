@@ -1,0 +1,192 @@
+<Window x:Class="TaskbarExtras.App.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="TaskbarExtras"
+        Width="440"
+        SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        ShowInTaskbar="True"
+        Background="{StaticResource SettingsPanelBrush}"
+        Foreground="{StaticResource MenuItemForegroundBrush}"
+        FontFamily="Segoe UI Variable Text, Segoe UI"
+        FontSize="{StaticResource MenuFontSize}"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
+
+  <Window.Resources>
+    <!--
+      The settings panel is skinned too, but it is NOT the menu: it is an ordinary window with a
+      system title bar, so it only borrows the palette and the corner radius. Both come from the
+      same ResourceDictionary the menu uses, which is why switching skins changes this window as
+      well — see docs/DESIGN.md §7.5.
+    -->
+
+    <Style x:Key="SettingsGroupHeader" TargetType="TextBlock">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource MenuItemForegroundBrush}" />
+      <Setter Property="Margin" Value="2,0,0,7" />
+    </Style>
+
+    <Style x:Key="SettingsCard" TargetType="Border">
+      <Setter Property="Background" Value="{StaticResource SettingsCardBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource SettingsCardBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{StaticResource SettingsCornerRadius}" />
+      <Setter Property="Padding" Value="12,11" />
+      <Setter Property="Margin" Value="0,0,0,16" />
+    </Style>
+
+    <Style x:Key="SettingsHint" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource SettingsSecondaryTextBrush}" />
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <!--
+      Checkbox and radio are re-templated rather than restyled. The stock WPF templates are the
+      Windows Vista Aero ones, and dropping them into a Windows 11 or Windows 10 skin looks like a
+      rendering fault. The tick and the dot are the only two shapes needed, so the templates are
+      small.
+    -->
+    <Style x:Key="SettingsCheckBox" TargetType="CheckBox">
+      <Setter Property="Foreground" Value="{StaticResource MenuItemForegroundBrush}" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="CheckBox">
+            <StackPanel Orientation="Horizontal" Background="Transparent">
+              <Border x:Name="Box" Width="18" Height="18" CornerRadius="3"
+                      VerticalAlignment="Center"
+                      Background="Transparent"
+                      BorderBrush="{StaticResource SettingsControlBorderBrush}"
+                      BorderThickness="1.2">
+                <Path x:Name="Tick" Data="M 3.5,9 L 7,12.5 L 14,5.5"
+                      Stroke="White" StrokeThickness="1.8"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                      Visibility="Collapsed" />
+              </Border>
+              <ContentPresenter Margin="10,0,0,0" VerticalAlignment="Center" />
+            </StackPanel>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Box" Property="Background" Value="{StaticResource SettingsAccentBrush}" />
+                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource SettingsAccentBrush}" />
+                <Setter TargetName="Tick" Property="Visibility" Value="Visible" />
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource SettingsAccentBrush}" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="SettingsRadio" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="{StaticResource MenuItemForegroundBrush}" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Margin" Value="0,0,0,9" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <StackPanel Orientation="Horizontal" Background="Transparent">
+              <Grid Width="18" Height="18" VerticalAlignment="Center">
+                <Ellipse x:Name="Ring" Stroke="{StaticResource SettingsControlBorderBrush}"
+                         StrokeThickness="1.3" Fill="Transparent" />
+                <Ellipse x:Name="Dot" Width="8" Height="8"
+                         Fill="{StaticResource SettingsAccentBrush}" Visibility="Collapsed" />
+              </Grid>
+              <ContentPresenter Margin="10,0,0,0" VerticalAlignment="Center" />
+            </StackPanel>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Ring" Property="Stroke" Value="{StaticResource SettingsAccentBrush}" />
+                <Setter TargetName="Ring" Property="StrokeThickness" Value="1.6" />
+                <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Ring" Property="Stroke" Value="{StaticResource SettingsAccentBrush}" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="SettingsButton" TargetType="Button">
+      <Setter Property="Foreground" Value="{StaticResource MenuItemForegroundBrush}" />
+      <Setter Property="Background" Value="{StaticResource SettingsButtonBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource SettingsControlBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="14,5" />
+      <Setter Property="MinWidth" Value="80" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Plate"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{StaticResource SettingsCornerRadius}"
+                    Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Plate" Property="Background" Value="{StaticResource SettingsButtonHoverBrush}" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+
+  <StackPanel Margin="22,18,22,18">
+
+    <TextBlock x:Name="StartupHeader" Style="{StaticResource SettingsGroupHeader}" />
+    <Border Style="{StaticResource SettingsCard}">
+      <StackPanel>
+        <CheckBox x:Name="StartupCheck" Style="{StaticResource SettingsCheckBox}"
+                  Click="OnStartupChanged" />
+        <TextBlock x:Name="StartupHint" Style="{StaticResource SettingsHint}"
+                   Margin="28,5,0,0" />
+      </StackPanel>
+    </Border>
+
+    <TextBlock x:Name="AppearanceHeader" Style="{StaticResource SettingsGroupHeader}" />
+    <Border Style="{StaticResource SettingsCard}">
+      <StackPanel>
+        <RadioButton x:Name="Win11Radio" GroupName="Skin"
+                     Style="{StaticResource SettingsRadio}" Checked="OnSkinChanged" />
+        <RadioButton x:Name="Win10Radio" GroupName="Skin"
+                     Style="{StaticResource SettingsRadio}" Margin="0" Checked="OnSkinChanged" />
+      </StackPanel>
+    </Border>
+
+    <TextBlock x:Name="LanguageHeader" Style="{StaticResource SettingsGroupHeader}" />
+    <Border Style="{StaticResource SettingsCard}">
+      <StackPanel>
+        <RadioButton x:Name="LanguageSystemRadio" GroupName="Language"
+                     Style="{StaticResource SettingsRadio}" Checked="OnLanguageChanged" />
+        <RadioButton x:Name="LanguageZhRadio" GroupName="Language"
+                     Style="{StaticResource SettingsRadio}" Checked="OnLanguageChanged" />
+        <RadioButton x:Name="LanguageEnRadio" GroupName="Language"
+                     Style="{StaticResource SettingsRadio}" Margin="0" Checked="OnLanguageChanged" />
+      </StackPanel>
+    </Border>
+
+    <TextBlock x:Name="RestartNote" Style="{StaticResource SettingsHint}" Margin="2,0,0,14" />
+    <TextBlock x:Name="SettingsPathText" Style="{StaticResource SettingsHint}"
+               Margin="2,0,0,14" TextTrimming="CharacterEllipsis" />
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+      <Button x:Name="OpenLogButton" Style="{StaticResource SettingsButton}" Click="OnOpenLog" />
+      <Button x:Name="CloseButton" Style="{StaticResource SettingsButton}" Margin="8,0,0,0"
+              IsDefault="True" IsCancel="True" Click="OnClose" />
+    </StackPanel>
+
+  </StackPanel>
+</Window>

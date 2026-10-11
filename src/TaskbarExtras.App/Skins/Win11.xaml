@@ -34,10 +34,20 @@
   <SolidColorBrush x:Key="MenuItemForegroundBrush" Color="#1A1A1A" />
   <SolidColorBrush x:Key="MenuItemHoverBrush" Color="#E8E8E8" />
   <SolidColorBrush x:Key="MenuItemDisabledBrush" Color="#9A9A9A" />
-  <!-- Group label ("Appearance"). Dimmer than a normal row, and deliberately not themed as a
-       disabled entry — it is a caption, not something that failed to become available. -->
-  <SolidColorBrush x:Key="MenuHeadingBrush" Color="#6E6E6E" />
   <SolidColorBrush x:Key="MenuSeparatorBrush" Color="#E5E5E5" />
+
+  <!-- Settings panel. It is a normal window, not the menu, so it borrows the palette and the
+       corner radius and nothing else. Keeping these here rather than in the window is what makes
+       the panel follow the skin. -->
+  <CornerRadius x:Key="SettingsCornerRadius">8</CornerRadius>
+  <SolidColorBrush x:Key="SettingsPanelBrush" Color="#F3F3F3" />
+  <SolidColorBrush x:Key="SettingsCardBrush" Color="#FFFFFF" />
+  <SolidColorBrush x:Key="SettingsCardBorderBrush" Color="#E5E5E5" />
+  <SolidColorBrush x:Key="SettingsControlBorderBrush" Color="#8A8A8A" />
+  <SolidColorBrush x:Key="SettingsSecondaryTextBrush" Color="#6E6E6E" />
+  <SolidColorBrush x:Key="SettingsAccentBrush" Color="#0F6CBD" />
+  <SolidColorBrush x:Key="SettingsButtonBrush" Color="#FDFDFD" />
+  <SolidColorBrush x:Key="SettingsButtonHoverBrush" Color="#E8E8E8" />
 
   <DropShadowEffect x:Key="MenuShadowEffect"
                     BlurRadius="16" ShadowDepth="3" Direction="270"

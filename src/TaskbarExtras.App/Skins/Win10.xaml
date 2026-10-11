@@ -27,10 +27,19 @@
   <SolidColorBrush x:Key="MenuItemForegroundBrush" Color="#1A1A1A" />
   <SolidColorBrush x:Key="MenuItemHoverBrush" Color="#D9E8F7" />
   <SolidColorBrush x:Key="MenuItemDisabledBrush" Color="#9A9A9A" />
-  <!-- Group label ("Appearance"). Dimmer than a normal row, and deliberately not themed as a
-       disabled entry — it is a caption, not something that failed to become available. -->
-  <SolidColorBrush x:Key="MenuHeadingBrush" Color="#6D6D6D" />
   <SolidColorBrush x:Key="MenuSeparatorBrush" Color="#DCDCDC" />
+
+  <!-- Settings panel. Same palette rules as the menu: flat, square, and the Windows 10 accent
+       blue rather than the Windows 11 one. -->
+  <CornerRadius x:Key="SettingsCornerRadius">0</CornerRadius>
+  <SolidColorBrush x:Key="SettingsPanelBrush" Color="#F0F0F0" />
+  <SolidColorBrush x:Key="SettingsCardBrush" Color="#FFFFFF" />
+  <SolidColorBrush x:Key="SettingsCardBorderBrush" Color="#DCDCDC" />
+  <SolidColorBrush x:Key="SettingsControlBorderBrush" Color="#7A7A7A" />
+  <SolidColorBrush x:Key="SettingsSecondaryTextBrush" Color="#6D6D6D" />
+  <SolidColorBrush x:Key="SettingsAccentBrush" Color="#0078D7" />
+  <SolidColorBrush x:Key="SettingsButtonBrush" Color="#E1E1E1" />
+  <SolidColorBrush x:Key="SettingsButtonHoverBrush" Color="#D9E8F7" />
 
   <DropShadowEffect x:Key="MenuShadowEffect"
                     BlurRadius="10" ShadowDepth="2" Direction="270"

@@ -42,9 +42,29 @@ public static class Localization
         // chevron — so without this there is no discoverable way to quit.
         ["menu.exit"]                 = ("Exit TaskbarExtras",     "退出 TaskbarExtras"),
 
-        // Appearance submenu. The skin names themselves are product names and stay untranslated;
-        // only this heading and the two explanatory lines switch with the language.
-        ["menu.appearance"]           = ("Appearance",             "外观"),
+        // One row in the menu, opening the settings panel. The app's own options used to be four
+        // separate rows; they are settings of this program, not of the taskbar, so they moved
+        // behind this one entry.
+        ["menu.settings"]             = ("Settings\u2026",         "设置\u2026"),
+
+        // The settings panel.
+        ["settings.title"]            = ("TaskbarExtras settings", "TaskbarExtras 设置"),
+        ["settings.startup.group"]    = ("Start-up",               "启动"),
+        ["settings.startup.hint"]     = ("Start TaskbarExtras automatically when you sign in to Windows.",
+                                         "登录 Windows 后自动启动 TaskbarExtras。"),
+        ["settings.appearance.group"] = ("Appearance",             "外观"),
+        ["settings.language.group"]   = ("Language",               "界面语言"),
+        ["settings.language.system"]  = ("Follow Windows",         "跟随系统"),
+        // Not translated: these two are the names of the languages themselves.
+        ["settings.language.zh"]      = ("\u4e2d\u6587",           "\u4e2d\u6587"),
+        ["settings.language.en"]      = ("English",                "English"),
+        ["settings.note.restart"]     = ("Changing the appearance or the language restarts TaskbarExtras.",
+                                         "改动外观或界面语言后，TaskbarExtras 会自动重启。"),
+        ["settings.file"]             = ("Settings file: {0}",     "设置文件：{0}"),
+        ["settings.open-log"]         = ("Open log",               "打开日志"),
+        ["settings.close"]            = ("Close",                  "关闭"),
+
+        // The skin names are product names and stay untranslated.
         ["menu.skin.win11"]           = ("Windows 11 style",       "Windows 11 风格"),
         ["menu.skin.win10"]           = ("Windows 10 style",       "Windows 10 风格"),
     };

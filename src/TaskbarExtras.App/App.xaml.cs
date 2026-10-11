@@ -19,13 +19,22 @@ public partial class App : System.Windows.Application
     /// </summary>
     private const string QuitEventName = @"Local\TaskbarExtras.Quit";
 
+    /// <summary>
+    /// Second doorbell, for <c>--settings</c>. A second copy cannot open the panel itself — the
+    /// single-instance check would have it exit first — so it rings this instead and the running
+    /// instance does the showing.
+    /// </summary>
+    private const string OpenSettingsEventName = @"Local\TaskbarExtras.OpenSettings";
+
     private static Mutex? _singleInstance;
     private EventWaitHandle? _quitSignal;
+    private EventWaitHandle? _settingsSignal;
     private bool _started;
 
     private TrayIcon? _tray;
     private TaskbarRightClickHook? _hook;
     private ClassicMenuWindow? _menu;
+    private SettingsWindow? _settings;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -65,6 +74,17 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // `--settings` on an already-running copy is a request, not a second copy: hand it over
+        // and go away. With nothing running there is nothing to hand it to, so it falls through
+        // and the panel opens at the end of a normal start-up.
+        var openSettingsOnStart = e.Args.Any(a => a is "--settings" or "--preferences");
+        if (openSettingsOnStart && TrySignalRunningInstance(
+                OpenSettingsEventName, "已让正在运行的 TaskbarExtras 打开设置面板。"))
+        {
+            Shutdown();
+            return;
+        }
+
         Log.Reset();
 
         if (!ClaimSingleInstance())
@@ -88,18 +108,14 @@ public partial class App : System.Windows.Application
             {
                 // Everything below the Win10 six, at the bottom. Windows 10's own menu had none of
                 // these, so they stay out of the way and keep the six rows above untouched.
-                MenuItemViewModel.Toggle(
-                    Localization.Get("menu.startup"), 'A',   // Autostart
-                    StartupRegistration.IsEnabled, withMnemonic, ToggleStartup),
-                MenuItemViewModel.Heading(Localization.Get("menu.appearance"), withMnemonic),
-                MenuItemViewModel.Radio(
-                    Localization.Get("menu.skin.win11"), '1',   // keyed 1 / 2: no letters free, and
-                    AppSettings.Skin == "win11", withMnemonic, // the numbers read as a pick-list
-                    () => SwitchSkin("win11")),
-                MenuItemViewModel.Radio(
-                    Localization.Get("menu.skin.win10"), '2',
-                    AppSettings.Skin == "win10", withMnemonic,
-                    () => SwitchSkin("win10")),
+                //
+                // One entry, not four. Start at sign-in, the skin picker and the appearance
+                // heading used to be rows here, which turned the bottom of the menu into a
+                // settings screen — a pile of options on every right-click that had nothing to do
+                // with the taskbar. They live in SettingsWindow now; see docs/DESIGN.md §7.5.
+                MenuItemViewModel.Command(
+                    Localization.Get("menu.settings"), 'E',  // sEttings — 'S' is taken by 堆叠显示窗口
+                    withMnemonic, ShowSettings),
                 MenuItemViewModel.Command(
                     Localization.Get("menu.exit"), 'X',      // eXit
                     withMnemonic, () => Shutdown())
@@ -143,18 +159,24 @@ public partial class App : System.Windows.Application
         _tray = new TrayIcon();
         _tray.OpenMenuRequested += (_, _) => ShowMenuAtCursor();
         _tray.ExitRequested += (_, _) => Shutdown();
-        _tray.StartupToggleRequested += (_, _) => ToggleStartup();
-        _tray.SkinSwitchRequested += (_, skin) => SwitchSkin(skin);
+        _tray.SettingsRequested += (_, _) => ShowSettings();
 
-        // Doorbell for `--quit`.
+        // Doorbells for `--quit` and `--settings`. Both are raised from a second process, so both
+        // have to be marshalled onto the UI thread before touching any window.
         _quitSignal = new EventWaitHandle(initialState: false, EventResetMode.AutoReset, QuitEventName, out _);
         ThreadPool.RegisterWaitForSingleObject(_quitSignal, OnQuitSignalled, null, Timeout.Infinite, executeOnlyOnce: false);
+
+        _settingsSignal = new EventWaitHandle(initialState: false, EventResetMode.AutoReset, OpenSettingsEventName, out _);
+        ThreadPool.RegisterWaitForSingleObject(_settingsSignal, OnOpenSettingsSignalled, null, Timeout.Infinite, executeOnlyOnce: false);
 
         var taskbar = TaskbarInfo.TryGetRect(out var tb) ? tb.ToString() : "<未找到>";
         var launchedAtSignIn = e.Args.Any(a => a == StartupRegistration.StartupArgument);
         _started = true;
         Log.Write($"启动完成。语言={Localization.Current} 钩子已装={hookInstalled} 任务栏={taskbar}"
-                  + (launchedAtSignIn ? " （开机自启）" : string.Empty));    }
+                  + (launchedAtSignIn ? " （开机自启）" : string.Empty));
+
+        if (openSettingsOnStart) ShowSettings();
+    }
 
     /// <summary>
     /// Runs on the hook thread, i.e. inside the low-level mouse hook. It must return quickly:
@@ -194,36 +216,39 @@ public partial class App : System.Windows.Application
     }
 
     /// <summary>
-    /// Flip the start-at-sign-in setting. The current state is re-read here rather than passed
-    /// in, so the toggle does the opposite of what is actually registered even if the registry
-    /// changed behind our back since the menu was built.
+    /// Opens the settings panel, or brings the open one forward.
+    ///
+    /// <para>
+    /// One instance, reused: two copies of a settings window can disagree with each other, and the
+    /// second one would be the one the user is not looking at. The window reads live state when it
+    /// is constructed, so it is thrown away on close rather than kept — reopening it has to
+    /// re-read the registry anyway, since Task Manager can change the start-up setting while the
+    /// panel is shut.
+    /// </para>
     /// </summary>
-    private static void ToggleStartup()
+    private void ShowSettings()
     {
-        var turningOn = !StartupRegistration.IsEnabled;
+        if (_settings is { IsLoaded: true })
+        {
+            if (_settings.WindowState == WindowState.Minimized) _settings.WindowState = WindowState.Normal;
+            _settings.Activate();
+            return;
+        }
 
-        bool ok;
-        string? error;
-        if (turningOn) ok = StartupRegistration.TryEnable(out error);
-        else ok = StartupRegistration.TryDisable(out error);
+        _settings = new SettingsWindow();
+        _settings.SkinChangeRequested += (_, skin) => SwitchSkin(skin);
+        _settings.LanguageChangeRequested += (_, tag) => SwitchLanguage(tag);
+        _settings.Closed += (_, _) => _settings = null;
 
-        Log.Write(turningOn
-            ? ok
-                ? $"已开启开机自启：{StartupRegistration.CommandLine}"
-                : $"开启开机自启失败：{error}"
-            : ok
-                ? "已关闭开机自启"
-                : $"关闭开机自启失败：{error}");
+        Log.Write("打开设置面板");
+        _settings.Show();
+        _settings.Activate();
+    }
 
-        if (ok) return;
-
-        // A menu row that does nothing when clicked is worse than an error message. This is the
-        // only place the app shows a dialog, and it only happens on the failure path.
-        System.Windows.Forms.MessageBox.Show(
-            $"{Localization.Get("startup.failed")}\n\n{error}",
-            Localization.Get("app.name"),
-            System.Windows.Forms.MessageBoxButtons.OK,
-            System.Windows.Forms.MessageBoxIcon.Warning);
+    private void OnOpenSettingsSignalled(object? state, bool timedOut)
+    {
+        Log.Write("收到 --settings 信号，打开设置面板");
+        Dispatcher.BeginInvoke(new Action(ShowSettings));
     }
 
     private void OnQuitSignalled(object? state, bool timedOut)
@@ -233,21 +258,24 @@ public partial class App : System.Windows.Application
     }
 
     /// <summary>
-    /// Tell an already-running instance to stop, via the named event. Returns immediately —
+    /// Tells an already-running instance to do something, via a named event. Returns immediately —
     /// this process never claims the single-instance mutex.
     /// </summary>
-    private static void QuitRunningInstance()
+    /// <returns>True when an instance was listening.</returns>
+    private static bool TrySignalRunningInstance(string eventName, string message)
     {
         ParentConsole.TryAttach();
-        if (EventWaitHandle.TryOpenExisting(QuitEventName, out var handle))
-        {
-            using (handle) handle.Set();
-            Console.WriteLine("已通知正在运行的 TaskbarExtras 退出。");
-        }
-        else
-        {
+        if (!EventWaitHandle.TryOpenExisting(eventName, out var handle)) return false;
+
+        using (handle) handle.Set();
+        Console.WriteLine(message);
+        return true;
+    }
+
+    private static void QuitRunningInstance()
+    {
+        if (!TrySignalRunningInstance(QuitEventName, "已通知正在运行的 TaskbarExtras 退出。"))
             Console.WriteLine("没有正在运行的 TaskbarExtras 实例。");
-        }
     }
 
     private static void PrintHelp()
@@ -256,6 +284,7 @@ public partial class App : System.Windows.Application
         Console.WriteLine("TaskbarExtras — 补回 Windows 11 被砍掉的任务栏右键菜单");
         Console.WriteLine();
         Console.WriteLine("  TaskbarExtras.exe                  启动（出现托盘图标）");
+        Console.WriteLine("  TaskbarExtras.exe --settings       打开设置面板");
         Console.WriteLine("  TaskbarExtras.exe --quit           让正在运行的实例退出");
         Console.WriteLine("  TaskbarExtras.exe --autostart      查看是否已设为开机自启");
         Console.WriteLine("  TaskbarExtras.exe --autostart on   设为开机自启");
@@ -267,7 +296,8 @@ public partial class App : System.Windows.Application
         Console.WriteLine("  TaskbarExtras.exe --preview        只显示一次菜单，用来预览皮肤");
         Console.WriteLine("  TaskbarExtras.exe --help           显示这段说明");
         Console.WriteLine();
-        Console.WriteLine("外观也可以在菜单里改：右键任务栏空白处 →「外观」→ 选一个。");
+        Console.WriteLine("外观、开机自启和界面语言都在设置面板里改：");
+        Console.WriteLine("  右键任务栏空白处 →「设置…」，或右键托盘图标 →「设置…」");
         Console.WriteLine($"设置存在 {AppSettings.Location}");
         Console.WriteLine();
         Console.WriteLine("退出方式（任选其一）：");
@@ -391,18 +421,46 @@ public partial class App : System.Windows.Application
     /// live swap possible, but it is a large mechanical change across both skins for a setting
     /// users touch once. Documented here so the next person does not rediscover it.
     /// </para>
-    ///
-    /// <para>
-    /// The language argument is carried over explicitly: the relaunch must not silently drop a
-    /// <c>--lang</c> the user started with.
-    /// </para>
     /// </summary>
     private void SwitchSkin(string skin)
     {
         AppSettings.SetSkin(skin);
+        Relaunch($"--skin {skin}");
+    }
+
+    /// <summary>
+    /// Same deal for the interface language, and for the same reason: the menu rebuilds its labels
+    /// on every open and would follow along, but the tray menu's labels are built once when the
+    /// icon is created and would keep the old language until something else forced a restart.
+    /// Restarting both together is honest; half-applying it is not.
+    /// </summary>
+    /// <param name="tag">Language tag, or null for "follow Windows".</param>
+    private void SwitchLanguage(string? tag)
+    {
+        AppSettings.SetLanguage(tag);
+        Relaunch(tag is null ? string.Empty : $"--lang {tag}");
+    }
+
+    /// <summary>
+    /// Saves the settings and starts a fresh copy of this executable, then shuts this one down.
+    ///
+    /// <para>
+    /// The arguments passed in are carried over explicitly rather than replayed from the original
+    /// command line: the whole point is that the relaunch reflects the choice just made, so a
+    /// <c>--skin</c> from the previous run must not survive it.
+    /// </para>
+    ///
+    /// <para>
+    /// Failure is reported and then ignored — the app keeps running with the old look rather than
+    /// exiting into nothing. A user who ends up with a windowless process and no way back is a
+    /// worse outcome than a skin that did not change.
+    /// </para>
+    /// </summary>
+    private void Relaunch(string arguments)
+    {
         if (!AppSettings.Save())
         {
-            Log.Write("皮肤已切换，但设置未能写入磁盘 —— 重启后会恢复原样。");
+            Log.Write("设置已切换，但未能写入磁盘 —— 重启后会恢复原样。");
         }
 
         var exe = Environment.ProcessPath;
@@ -417,12 +475,13 @@ public partial class App : System.Windows.Application
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe)
             {
                 UseShellExecute = true,
-                Arguments = $"--skin {skin}"
+                Arguments = arguments
             });
         }
         catch (Exception ex)
         {
             Log.Write($"重启失败，请手动启动: {ex.Message}");
+            return;
         }
 
         Shutdown();
@@ -436,6 +495,15 @@ public partial class App : System.Windows.Application
     /// line wins so <c>--skin win11</c> still works as a one-off override and <c>--preview</c> can
     /// show a skin without committing to it; otherwise the remembered choice from
     /// <see cref="AppSettings"/> is used, which is what makes a skin stick across restarts.
+    /// </para>
+    ///
+    /// <para>
+    /// The override is adopted into <see cref="AppSettings"/> in memory but not written to disk, so
+    /// a <c>--skin</c> launch leaves the stored default alone — which is what makes it one-off.
+    /// The one way it can still end up persisted is if the settings panel is used during that same
+    /// run: <see cref="Relaunch"/> saves everything, including the skin currently in effect. That
+    /// is deliberate — the panel reports what is on screen, so a user who changes the language
+    /// while running <c>--skin win10</c> keeps win10 rather than being silently flipped back.
     /// </para>
     ///
     /// <para>
@@ -505,10 +573,12 @@ public partial class App : System.Windows.Application
         // log look like the app exited twice.
         if (_started) Log.Write("退出");
         TaskbarButtonMap.Stop();
+        _settings?.Close();
         _tray?.Dispose();
         _hook?.Dispose();
         _menu?.Close();
         _quitSignal?.Dispose();
+        _settingsSignal?.Dispose();
         _singleInstance?.Dispose();
         base.OnExit(e);
     }

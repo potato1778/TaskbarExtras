@@ -35,16 +35,10 @@ public sealed class MenuItemViewModel
 
     public bool IsChecked { get; private init; }
 
-    /// <summary>
-    /// True for a non-interactive group label. Rendered dimmed and never clickable, so it is
-    /// visually obvious that the rows underneath belong together.
-    /// </summary>
-    public bool IsHeading { get; private init; }
-
     /// <summary>Tick glyph, or empty when this row is not a checked toggle.</summary>
     public string CheckGlyph => IsToggle && IsChecked ? "\u2713" : string.Empty;
 
-    public bool IsEnabled => !IsHeading && (Invoke is not null || (Action?.CanExecute() ?? false));
+    public bool IsEnabled => Invoke is not null || (Action?.CanExecute() ?? false);
 
     public static MenuItemViewModel From(IAction action, bool withMnemonic) => new()
     {
@@ -56,43 +50,19 @@ public sealed class MenuItemViewModel
     public static MenuItemViewModel Separator() => new() { IsSeparator = true };
 
     /// <summary>
-    /// A pick-one-of-N row: exactly one member of the group carries the tick.
-    ///
-    /// <para>
-    /// Distinct from <see cref="Toggle"/> because the semantics differ — a toggle flips itself,
-    /// while a radio row selects and implicitly deselects its siblings. The menu is a flat list of
-    /// rows with a reserved tick column (see the item template), so a real submenu would mean
-    /// adding popup and hover handling to the template for a setting users touch once. Radio rows
-    /// reuse the column that is already there and keep the skin switch reachable by mnemonic.
-    /// </para>
-    /// </summary>
-    public static MenuItemViewModel Radio(
-        string label, char mnemonic, bool isSelected, bool withMnemonic, Action invoke) => new()
-    {
-        DisplayName = Compose(label, mnemonic, withMnemonic),
-        Mnemonic = mnemonic,
-        Invoke = invoke,
-        IsToggle = true,
-        IsChecked = isSelected
-    };
-
-    /// <summary>
-    /// A heading row: no tick, no action, not selectable. Used to group the rows below it, which
-    /// is how the appearance entries announce themselves without a submenu.
-    /// </summary>
-    public static MenuItemViewModel Heading(string label, bool withMnemonic) => new()
-    {
-        DisplayName = Compose(label, '\0', withMnemonic),
-        IsHeading = true
-    };
-
-    /// <summary>
     /// A setting row: click toggles it, the tick shows the state.
     ///
     /// <para>
+    /// Currently unused — the one checkable row the menu had (start at sign-in) moved into the
+    /// settings panel. Kept because it is the shape the real Windows 10 menu needs: "Lock the
+    /// taskbar" is a ticked row, and the reserved tick column in the item template exists for
+    /// exactly this.
+    /// </para>
+    ///
+    /// <para>
     /// The state is read when the row is built rather than stored, and rows are rebuilt on every
-    /// menu open — so a change made from the command line, or from Task Manager, shows up the
-    /// next time the menu is opened instead of being remembered wrongly.
+    /// menu open — so a change made elsewhere shows up the next time the menu is opened instead of
+    /// being remembered wrongly.
     /// </para>
     /// </summary>
     public static MenuItemViewModel Toggle(
@@ -106,9 +76,9 @@ public sealed class MenuItemViewModel
     };
 
     /// <summary>
-    /// A row that is not a shell action. Used for "Exit TaskbarExtras": quitting the app is not
-    /// something the Windows 10 taskbar menu could do, so it does not belong in the action
-    /// registry — but this app has no main window, so the user still needs a way out.
+    /// A row that is not a shell action. Used for "Settings…" and "Exit TaskbarExtras": neither is
+    /// something the Windows 10 taskbar menu could do, so they do not belong in the action
+    /// registry — but this app has no main window, so the user still needs to reach them.
     /// </summary>
     public static MenuItemViewModel Command(string label, char mnemonic, bool withMnemonic, Action invoke) => new()
     {
