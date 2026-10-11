@@ -652,6 +652,38 @@ Win7 的 Aero 玻璃用 `DwmEnableBlurBehindWindow`。**这个 API 从 Windows 8
 
 优先级：**命令行 > 存储值 > 默认值**。`SkinFromArguments` 无参数时返回 `null` 而不是默认值 —— 这样 `ApplySkin` 才能区分「用户明确要 win11」和「用户什么都没说」，否则命令行永远无法覆盖存储的 win10。
 
+### 7.5 设置面板：为什么不是菜单里的四行（2026-10-11）
+
+上一版把「开机自启 / 外观 / Windows 11 风格 / Windows 10 风格」四行直接摊在右键菜单底部。**这等于把菜单变成了设置页**：每次右键，菜单末尾都跟着一堆和任务栏毫无关系的选项。它们是**这个程序的**设置，不是任务栏能做的事。
+
+改成一个「设置…」行，点开一个普通窗口。菜单回到菜单的样子。
+
+**为什么是窗口而不是子菜单。** 子菜单要在 `DataTemplate` 里加弹出层和悬停处理，而设置项有勾选框和单选框两种控件 —— 平铺的行模板只有一个预留的勾列，塞不下。窗口还能放说明文字和设置文件路径，这些在菜单里没地方写。
+
+**为什么面板也吃皮肤。** 面板用的画刷全部来自同一个 `ResourceDictionary`（`SettingsPanelBrush` / `SettingsAccentBrush` / `SettingsCornerRadius` …），所以选 Win10 皮肤时面板也是方的、扁的、用 Win10 那支蓝。代价是每套皮肤多七个键，换来的是「换皮肤」这件事在视觉上真的换了一整套。
+
+**勾选框和单选框是重画模板，不是改样式。** WPF 自带的 `CheckBox` / `RadioButton` 模板是 Vista Aero 那一套，直接放进 Win11 或 Win10 的面板里看起来像渲染故障。只需要一个对勾和一个圆点，所以模板很短。
+
+**窗口只报事件，不自己动手。** `SettingsWindow` 抛 `SkinChangeRequested` / `LanguageChangeRequested`，由 `App` 决定怎么落地 —— 因为其中两项改的是**启动时就固化下来的状态**（皮肤是窗口构造前合并的字典，托盘菜单的文字是建图标时写死的），落地方式只能是重启进程，而重启是 `App` 的事。窗口不该知道 `Environment.ProcessPath` 这种东西。
+
+**`--settings` 用第二个命名事件。** 已经有一个 `Local\TaskbarExtras.Quit` 门铃了，照抄一个 `Local\TaskbarExtras.OpenSettings`。第二次启动的进程**不能自己开面板** —— 单实例检查会让它先退出 —— 所以它按铃、打印一行、退出；正在跑的实例收到信号后在 UI 线程上开面板。没有实例在跑时按铃失败，就直接走正常启动，启动末尾开面板。
+
+**一个诚实的边界**：`--skin X` 是「只管这一次」，只改内存不写盘。唯一的例外是**同一次运行里用了设置面板** —— `Relaunch` 会把当前生效的皮肤一起存下来。这是故意的：面板显示的就是屏幕上正在用的那套，用户在 `--skin win10` 的状态下改语言，不该被悄悄换回 win11。
+
+### 7.6 README 截图怎么拍（2026-10-11）
+
+脚本在 `tools/screenshots/shoot.py`，跑一次生成 8 张（菜单 + 设置面板 × win11/win10 × zh/en）。
+
+两个坑，都不是看一眼能猜出来的：
+
+**坑一：屏 DC `BitBlt` 抓不到。** `--preview` 的菜单**一被抢焦点就自己关、进程跟着退**，所以等到抓像素的时候窗口已经没了 —— 抓到的是桌面壁纸。**这个坑真的把三张 README 截图覆盖成了壁纸**。改用 `PrintWindow` + `PW_RENDERFULLCONTENT`（`0x2`）：把窗口渲染进内存 DC，**不需要它在最前面，也不动鼠标**。另外菜单窗口是 `AllowsTransparency=True`，`PrintWindow` 会把透明边距和背景合成，所以还要**裁到不透明区域**。
+
+**坑二：两个窗口不能靠标题区分。** 都是同一个进程里的 WPF `HwndWrapper[...]` 窗口，而**设置面板的标题是翻译过的**（`TaskbarExtras 设置`）。窗口样式才是稳定的：菜单是 `ShowInTaskbar=False`（有 `WS_EX_TOOLWINDOW`，没有 `WS_EX_APPWINDOW`），面板是普通窗口（有 `WS_EX_APPWINDOW`）。
+
+> 顺带一个 UIA 的坑：**`AutomationElement.Current.ClassName` 对 WPF 窗口返回的是 `"Window"`，不是 Win32 类名**。想靠 `HwndWrapper[...]` 从 UIA 里筛窗口会一个都找不到 —— 那条路只在 `EnumWindows` + `GetClassNameW` 下成立。
+
+脚本**不改存储的皮肤**：所有运行都显式传 `--skin`（不写盘），也不点面板里的任何单选。重新生成图片不该改动这台机器。
+
 ---
 
 ## 8. 多显示器与 DPI
@@ -694,6 +726,8 @@ Win7 的 Aero 玻璃用 `DwmEnableBlurBehindWindow`。**这个 API 从 Windows 8
 ```
 
 用 `System.Text.Json`，手写 `Model` 类。`null` 的 `Language` 表示「跟随系统」，与「用户选了 zh」区分开。
+
+改它有三条路：设置面板（§7.5，主要方式）、`--skin-set`、`--autostart on|off`。面板只是它的界面 —— 文件本身仍然是唯一的事实来源，手改也认。
 
 三个刻意的选择：
 
@@ -762,7 +796,7 @@ Win7 的 Aero 玻璃用 `DwmEnableBlurBehindWindow`。**这个 API 从 Windows 8
 **坑三：命令行必须带引号。** `C:\Program Files\...` 不加引号会在第一个空格处被切断。
 读取时也按引号优先解析。
 
-**坑四：开启时必须清掉任务管理器的禁用记录。** 否则用户点了「开机自启」、勾也亮了，
+**坑四：开启时必须清掉任务管理器的禁用记录。** 否则用户在设置面板里勾了「开机自启」、勾也亮了，
 Windows 那边却仍然记着「已禁用」—— 界面说生效了，功能没生效。
 清掉它，「开」才能压过之前的「关」，无论那个「关」是在哪记的。
 
@@ -810,17 +844,20 @@ TaskbarExtras/
 ├─ .github/workflows/build.yml
 ├─ docs/
 │  ├─ DESIGN.md            ← 本文档
+│  ├─ screenshot-*.png     ← README 用的截图，由 PrintWindow 抓（见 §7.6）
 │  └─ spikes/              ← S1/S2 的结论记录
 ├─ src/
-│  ├─ TaskbarExtras.App/       WPF 宿主、托盘、设置窗口
-│  ├─ TaskbarExtras.Shell/     AppBar、窗口枚举、COM 互操作  ← 唯一的 P/Invoke 层
-│  ├─ TaskbarExtras.Actions/   动作注册表与实现
-│  └─ TaskbarExtras.Skins/     皮肤引擎 + 内置皮肤 XAML
-├─ tests/TaskbarExtras.Tests/
-├─ Directory.Build.props      统一 TFM / 版本号 / 可空引用
-├─ LICENSE                    MIT
-└─ README.md                  ← 架构取舍叙事（见下）
+│  ├─ TaskbarExtras.App/        WPF 宿主、菜单窗口、设置窗口、托盘、皮肤 XAML
+│  ├─ TaskbarExtras.Shell/      AppBar、窗口枚举、COM 互操作  ← 唯一的 P/Invoke 层
+│  └─ TaskbarExtras.Actions/    动作注册表、内置动作、文案表
+├─ Directory.Build.props       统一 TFM / 版本号 / 可空引用
+├─ LICENSE                     MIT
+└─ README.md                   ← 架构取舍叙事（见下）
 ```
+
+> 皮肤没有独立工程 —— 它们就是 `TaskbarExtras.App/Skins/*.xaml`，被 `ApplySkin` 作为
+> `ResourceDictionary` 合并进来。单独开一个 `TaskbarExtras.Skins` 工程只会多一个
+> 程序集边界，而皮肤是**数据**，不是代码（§7.2）。
 
 **README 是作品集的门面。** 必须写清楚：
 

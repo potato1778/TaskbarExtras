@@ -30,15 +30,28 @@ Right-click the taskbar's empty background:
 | Show windows side by side | |
 | Show desktop | Minimise everything; click again to restore |
 | Taskbar settings | |
-| Start at sign-in | Checkable; click to toggle |
-| Appearance | Windows 11 / Windows 10 style; click to switch and restart |
+| Settings… | Opens this app's settings panel |
 | Exit TaskbarExtras | |
 
-The first six are this app's own version of the Windows 10 taskbar menu, in two groups: the first four **rearrange windows that are already open**, and the pair below the separator is something else — one hides them all, the other is a settings entry point. **Appearance / Start at sign-in / Exit** did not exist in Windows 10 (it started itself from Settings, and quitting meant killing the process), so they sit at the very bottom below the last separator.
+The first six are this app's own version of the Windows 10 taskbar menu, in two groups: the first four **rearrange windows that are already open**, and the pair below the separator is something else — one hides them all, the other is a settings entry point. **Settings… / Exit** did not exist in Windows 10, so they sit below the last separator.
 
 > A word about fidelity: Windows 10's real taskbar menu is `Toolbars / Search / Show Task View button / Show open windows / Task Manager / Lock the taskbar / Properties` — it manages **system toggles** and contains no window-arranging items at all. What this app implements is the window-arranging set, closer to the Windows 7 era taskbar menu. The two do not correspond item for item; that is a deliberate choice about function, not an oversight.
 
 Only the **empty** part of the taskbar is intercepted. Right-clicking Start still gives you Win+X, right-clicking a task button still gives you its jump list, right-clicking a tray icon still gives you its own menu. None of that is touched.
+
+## Settings
+
+The **Settings…** row opens an ordinary settings window:
+
+![Settings panel](docs/screenshot-settings-win11-en.png)
+
+Three groups: **Start-up** (start at sign-in), **Appearance** (Win11 / Win10 style) and **Language** (follow Windows / 中文 / English). Changing the appearance or the language restarts the app — see "Skins" below for why.
+
+The bottom of the window names the settings file and offers **Open log**.
+
+The panel is skinned too, so it follows the skin: pick the Windows 10 style and the panel goes square, flat, and Windows 10 blue.
+
+The tray icon's own menu carries a **Settings…** entry as well. That duplication is deliberate — whether the main menu opens at all depends on the mouse hook having installed, and the tray route does not.
 
 ## Running it
 
@@ -54,6 +67,7 @@ One exe comes out. Double-click it. No admin rights, no .NET install needed.
 
 ```
 TaskbarExtras.exe                     start
+TaskbarExtras.exe --settings          open the settings panel
 TaskbarExtras.exe --quit              ask a running instance to stop
 TaskbarExtras.exe --autostart         report whether it starts at sign-in
 TaskbarExtras.exe --autostart on|off  turn that on or off
@@ -66,6 +80,8 @@ TaskbarExtras.exe --preview           show the menu once, for trying out a skin
 TaskbarExtras.exe --help              print this
 ```
 
+With an instance already running, `--settings` hands the request to it rather than starting a second process.
+
 ## Quitting
 
 There's no main window, so there's nothing to close. Three ways out:
@@ -76,7 +92,7 @@ There's no main window, so there's nothing to close. Three ways out:
 
 ## Starting at sign-in
 
-The menu has a **Start at sign-in** row. Click it to toggle; the tick shows the state.
+Right-click the taskbar → **Settings…** → tick **Start at sign-in**.
 
 Or from the command line:
 
@@ -87,9 +103,9 @@ TaskbarExtras.exe --autostart off
 
 It writes to `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` — per-user, no admin rights.
 
-One thing worth knowing: Task Manager's Startup tab can disable an entry **without deleting it**. It records that decision somewhere else entirely, so the Run key keeps looking perfectly healthy while nothing ever starts. This app reads both, which is why disabling it there makes the tick disappear, and clicking the row turns it back on for real.
+One thing worth knowing: Task Manager's Startup tab can disable an entry **without deleting it**. It records that decision somewhere else entirely, so the Run key keeps looking perfectly healthy while nothing ever starts. This app reads both, which is why disabling it there clears the tick in the panel, and ticking it again turns it back on for real.
 
-Related: if you move the exe, the old registration points at a path that no longer exists. That also shows as unticked, and clicking it re-registers wherever the app is now.
+Related: if you move the exe, the old registration points at a path that no longer exists. That also shows as unticked, and ticking it re-registers wherever the app is now.
 
 ## Skins
 
@@ -106,9 +122,7 @@ The two are modelled on the real thing from their own era rather than being one 
 
 ### Switching
 
-**Right-click the empty taskbar → Appearance → pick one.** That's the whole procedure; it restarts itself.
-
-The tray icon carries the same Appearance submenu. That duplication is deliberate — whether the main menu opens at all depends on the mouse hook having installed, and the tray route does not.
+**Right-click the empty taskbar → Settings… → Appearance → pick one.** It restarts itself.
 
 Two command-line flags, differing only in whether they remember:
 
@@ -119,7 +133,13 @@ TaskbarExtras.exe --skin win10        # this run only, default untouched
 
 The choice is stored in `%APPDATA%\TaskbarExtras\settings.json` and survives restarts.
 
-**Why does switching restart the process?** The skin is a dictionary merged in before the menu window is constructed, and the window's brushes reference it with `StaticResource` — resolved once at load, so swapping the dictionary underneath a live window does nothing. A switch in place would mean converting every brush reference to `DynamicResource`. A restart costs about 300 ms.
+**Why does switching restart the process?** The skin is a dictionary merged in before the menu window is constructed, and the window's brushes reference it with `StaticResource` — resolved once at load, so swapping the dictionary underneath a live window does nothing. A switch in place would mean converting every brush reference to `DynamicResource`. A restart costs about 300 ms. The language is the same story: the menu rebuilds its labels on every open and would follow along, but the tray menu's labels are fixed when the icon is created, and half-applying it is worse than restarting.
+
+The panel uses the same skin, so the two skins give two different-looking panels:
+
+| Settings panel, win11 | Settings panel, win10 |
+|---|---|
+| ![Settings win11](docs/screenshot-settings-win11-en.png) | ![Settings win10](docs/screenshot-settings-win10-en.png) |
 
 ## Two rules
 
@@ -146,7 +166,7 @@ The reason is practical: tools built on injection have to be rewritten every tim
 
 - Only tested on a single 150%-scaled display. Dual monitors and mixed DPI are unverified.
 - About 40 ms between the right-click and the menu appearing — swallowing the click and then rendering can't be made free.
-- Changing skins restarts the process (see Skins above for why).
+- Changing the skin or the UI language restarts the process (see Skins above for why).
 - No compatibility handling for other taskbar tools; running them side by side may fight.
 - Telling "empty taskbar" apart from "an app button" needs UI Automation, because Windows 11 draws the task buttons with XAML and their positions exist nowhere in the window tree. The snapshot is rebuilt once a second. If UIA ever comes up empty it falls back to the old window-tree test, which can misjudge on Windows 11.
 - The letter shortcuts need the menu to hold keyboard focus. That works in practice; if it ever does not (the log says so), the letters go quiet while clicking still works.
