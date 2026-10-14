@@ -7,8 +7,10 @@
       <ResourceDictionary.MergedDictionaries>
         <!-- Swapping this one line is how a different skin gets applied. The skin argument
              picks the file before the menu window is constructed, because StaticResource
-             resolves at load time. -->
-        <ResourceDictionary Source="Skins/Win11.xaml" />
+             resolves at load time. This is only the dictionary for the sliver of time before
+             ApplySkin runs, plus the fallback if a skin fails to load — so it mirrors
+             AppSettings.DefaultSkin. -->
+        <ResourceDictionary Source="Skins/Win10.xaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Application.Resources>

@@ -29,7 +29,23 @@ namespace TaskbarExtras.App;
 /// </summary>
 public static class AppSettings
 {
-    public const string DefaultSkin = "win11";
+    /// <summary>
+    /// Skin used when neither the command line nor the settings file names one.
+    ///
+    /// <para>
+    /// Windows 10 rather than Windows 11, deliberately. The whole point of this program is to put
+    /// back what Windows 11 removed, so the honest default is the menu the machine's owner is
+    /// actually trying to get back — the Windows 10 one. Defaulting to the native Windows 11 look
+    /// would make the app blend in so well that a new user could not tell it was running.
+    /// </para>
+    ///
+    /// <para>
+    /// Note that this is only the <i>fallback</i>: an existing <c>settings.json</c> wins over it,
+    /// so upgrading does not yank the skin out from under anyone who already chose one. Only a
+    /// fresh install — or a deleted settings file — lands here.
+    /// </para>
+    /// </summary>
+    public const string DefaultSkin = "win10";
 
     private static readonly string Directory =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TaskbarExtras");

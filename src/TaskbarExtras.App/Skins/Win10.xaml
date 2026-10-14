@@ -1,8 +1,12 @@
 <!--
-  Win10 skin — opt in by selecting the win10 skin on the command line.
+  Win10 skin — the DEFAULT.
 
   Matches the Windows 10 taskbar context menu: flat #F2F2F2 panel, almost square corners,
   tighter rows, and the light blue hover fill that Windows 10 used for menu items.
+
+  It is the default because the point of this program is to give back what Windows 11 removed,
+  and this is the menu people are trying to get back. The native Windows 11 look is opt-in via
+  the Windows 11 style radio in the settings panel.
 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"

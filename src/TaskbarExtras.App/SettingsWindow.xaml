@@ -159,9 +159,11 @@
     <TextBlock x:Name="AppearanceHeader" Style="{StaticResource SettingsGroupHeader}" />
     <Border Style="{StaticResource SettingsCard}">
       <StackPanel>
-        <RadioButton x:Name="Win11Radio" GroupName="Skin"
-                     Style="{StaticResource SettingsRadio}" Checked="OnSkinChanged" />
+        <!-- Order matters: the default skin goes first, so "the one on top" and "the one you get
+             out of the box" are the same answer. -->
         <RadioButton x:Name="Win10Radio" GroupName="Skin"
+                     Style="{StaticResource SettingsRadio}" Checked="OnSkinChanged" />
+        <RadioButton x:Name="Win11Radio" GroupName="Skin"
                      Style="{StaticResource SettingsRadio}" Margin="0" Checked="OnSkinChanged" />
       </StackPanel>
     </Border>

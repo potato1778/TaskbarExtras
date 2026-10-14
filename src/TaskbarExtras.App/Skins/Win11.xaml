@@ -1,10 +1,10 @@
 <!--
-  Win11 skin — the DEFAULT.
+  Win11 skin — opt in via the settings panel.
 
   Matches the Windows 11 context menu: near-white card, generous corner radius, soft drop
-  shadow, and a neutral grey hover fill. It is the default because the menu is drawn on a
-  Windows 11 desktop and should look like it belongs there; the Win10 look is opt-in via the
-  skin command line argument.
+  shadow, and a neutral grey hover fill. It is the native look of the desktop this menu is drawn
+  on, which is exactly why it is not the default — a menu that blends in completely gives no clue
+  the app is running at all.
 
   A skin is DATA, not code. Everything the menu looks like lives here, so a Win7 Aero or
   XP Luna skin is another file like this one. See docs/DESIGN.md §7.

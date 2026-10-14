@@ -58,8 +58,8 @@ public partial class SettingsWindow : Window
         StartupHint.Text = Localization.Get("settings.startup.hint");
 
         AppearanceHeader.Text = Localization.Get("settings.appearance.group");
-        Win11Radio.Content = Localization.Get("menu.skin.win11");
         Win10Radio.Content = Localization.Get("menu.skin.win10");
+        Win11Radio.Content = Localization.Get("menu.skin.win11");
 
         LanguageHeader.Text = Localization.Get("settings.language.group");
         LanguageSystemRadio.Content = Localization.Get("settings.language.system");

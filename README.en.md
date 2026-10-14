@@ -4,7 +4,7 @@
 
 Windows 11 threw away most of the taskbar right-click menu. This puts it back.
 
-![The win11 skin](docs/screenshot-win11-en.png)
+![The win10 skin](docs/screenshot-win10-en.png)
 
 ## How this started
 
@@ -43,7 +43,7 @@ Only the **empty** part of the taskbar is intercepted. Right-clicking Start stil
 
 The **Settings…** row opens an ordinary settings window:
 
-![Settings panel](docs/screenshot-settings-win11-en.png)
+![Settings panel](docs/screenshot-settings-win10-en.png)
 
 Three groups: **Start-up** (start at sign-in), **Appearance** (Win11 / Win10 style) and **Language** (follow Windows / 中文 / English). Changing the appearance or the language restarts the app — see "Skins" below for why.
 
@@ -111,14 +111,18 @@ Related: if you move the exe, the old registration points at a path that no long
 
 Everything the menu looks like lives in a `ResourceDictionary`. A new skin is a new xaml file, no C# changes.
 
-| win11 (default) | win10 |
+**The default is the win10 style.** The entire point of this program is putting back what Windows 11 took away, so the default should be the menu you are trying to get back — not the native Windows 11 one. The Windows 11 style is still there, but as a default it blends in so well you cannot tell the app is running.
+
+A stored choice always wins over the default, so **upgrading does not change the skin of anyone who already picked one.**
+
+| win10 (default) | win11 |
 |---|---|
-| ![win11](docs/screenshot-win11-en.png) | ![win10](docs/screenshot-win10-en.png) |
+| ![win10](docs/screenshot-win10-en.png) | ![win11](docs/screenshot-win11-en.png) |
 
 The two are modelled on the real thing from their own era rather than being one design recoloured:
 
-- **win11**: near-white card, 8 px corners, soft shadow, neutral grey hover.
 - **win10**: flat `#F2F2F2`, **square corners**, a darker grey border, and the shortcut letter written into the label — `Task Manager(K)`. **Those letters actually work**; they are not decoration.
+- **win11**: near-white card, 8 px corners, soft shadow, neutral grey hover.
 
 ### Switching
 
@@ -137,9 +141,9 @@ The choice is stored in `%APPDATA%\TaskbarExtras\settings.json` and survives res
 
 The panel uses the same skin, so the two skins give two different-looking panels:
 
-| Settings panel, win11 | Settings panel, win10 |
+| Settings panel, win10 (default) | Settings panel, win11 |
 |---|---|
-| ![Settings win11](docs/screenshot-settings-win11-en.png) | ![Settings win10](docs/screenshot-settings-win10-en.png) |
+| ![Settings win10](docs/screenshot-settings-win10-en.png) | ![Settings win11](docs/screenshot-settings-win11-en.png) |
 
 ## Two rules
 

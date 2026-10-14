@@ -4,7 +4,7 @@
 
 把 Windows 11 删掉的任务栏右键菜单补回来。
 
-![win11 皮肤](docs/screenshot-win11-zh.png)
+![win10 皮肤](docs/screenshot-win10-zh.png)
 
 ## 起因
 
@@ -43,7 +43,7 @@
 
 菜单里的「设置…」打开一个普通的设置窗口：
 
-![设置面板](docs/screenshot-settings-win11-zh.png)
+![设置面板](docs/screenshot-settings-win10-zh.png)
 
 三组：**启动**（开机自启）、**外观**（Win11 / Win10 风格）、**界面语言**（跟随系统 / 中文 / English）。改外观或语言会**自动重启**，原因见下面「皮肤」那节。
 
@@ -110,9 +110,13 @@ TaskbarExtras.exe --autostart off
 
 菜单外观全写在 `ResourceDictionary` 里。加一套皮肤就是加一个 xaml，不用改 C#。
 
-| win11（默认） | win10 |
+**默认是 win10 风格。** 这个程序的全部意义就是把 Win11 砍掉的东西补回来，那默认就该是你想找回来的那个菜单 —— 不是 Win11 原生那个。留 Win11 风格也有，但默认的话外观太"合群"，看不出程序在跑。
+
+没设置过就用默认值；**已经存过的设置不会被覆盖** —— 升级上来的人选过什么，还是什么。
+
+| win10（默认） | win11 |
 |---|---|
-| ![win11](docs/screenshot-win11-zh.png) | ![win10](docs/screenshot-win10-zh.png) |
+| ![win10](docs/screenshot-win10-zh.png) | ![win11](docs/screenshot-win11-zh.png) |
 
 ### 怎么切换
 
@@ -131,14 +135,14 @@ TaskbarExtras.exe --skin win10        # 只管这一次，不改默认
 
 两套是按各自年代的实物做的，不是同一套换个颜色：
 
-- **win11**：近白卡片、8px 圆角、柔和阴影、中性灰悬停。
 - **win10**：`#F2F2F2` 扁平底、**直角**、更深的灰边框，标签里带快捷键字母 —— `任务管理器(K)` 这种。**那些字母真的能按**，不是画上去好看的。
+- **win11**：近白卡片、8px 圆角、柔和阴影、中性灰悬停。
 
 设置面板也吃同一套皮肤，所以两套皮肤下的面板长得不一样：
 
-| win11 下的设置面板 | win10 下的设置面板 |
+| win10 下的设置面板（默认） | win11 下的设置面板 |
 |---|---|
-| ![设置面板 win11](docs/screenshot-settings-win11-zh.png) | ![设置面板 win10](docs/screenshot-settings-win10-zh.png) |
+| ![设置面板 win10](docs/screenshot-settings-win10-zh.png) | ![设置面板 win11](docs/screenshot-settings-win11-zh.png) |
 
 ## 原则
 

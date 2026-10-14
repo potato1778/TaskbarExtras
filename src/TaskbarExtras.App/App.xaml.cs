@@ -296,6 +296,8 @@ public partial class App : System.Windows.Application
         Console.WriteLine("  TaskbarExtras.exe --preview        只显示一次菜单，用来预览皮肤");
         Console.WriteLine("  TaskbarExtras.exe --help           显示这段说明");
         Console.WriteLine();
+        Console.WriteLine($"默认外观是 {AppSettings.DefaultSkin}（没设置过时用这个）。");
+        Console.WriteLine();
         Console.WriteLine("外观、开机自启和界面语言都在设置面板里改：");
         Console.WriteLine("  右键任务栏空白处 →「设置…」，或右键托盘图标 →「设置…」");
         Console.WriteLine($"设置存在 {AppSettings.Location}");
@@ -517,17 +519,12 @@ public partial class App : System.Windows.Application
     {
         var requested = SkinFromArguments(args) ?? AppSettings.Skin;
 
-        var fileName = requested switch
-        {
-            "win10" => "Win10.xaml",
-            "win11" => "Win11.xaml",
-            _ => null
-        };
+        var fileName = SkinFileName(requested);
 
         if (fileName is null)
         {
-            Log.Write($"未知皮肤 '{requested}'，回退到 win11");
-            fileName = "Win11.xaml";
+            Log.Write($"未知皮肤 '{requested}'，回退到 {AppSettings.DefaultSkin}");
+            fileName = SkinFileName(AppSettings.DefaultSkin)!;
             requested = AppSettings.DefaultSkin;
         }
 
@@ -545,6 +542,18 @@ public partial class App : System.Windows.Application
             Log.Write($"皮肤 '{fileName}' 加载失败，沿用默认: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// Maps a skin name to the file it lives in, or null when the name is not one we know.
+    /// Split out of <see cref="ApplySkin"/> so the fallback path does not have to hardcode a
+    /// second filename that could drift away from <see cref="AppSettings.DefaultSkin"/>.
+    /// </summary>
+    private static string? SkinFileName(string skin) => skin switch
+    {
+        "win10" => "Win10.xaml",
+        "win11" => "Win11.xaml",
+        _ => null
+    };
 
     /// <summary>
     /// The skin named on the command line, or null when the argument is absent. Returning null
