@@ -39,13 +39,33 @@ The first six are this app's own version of the Windows 10 taskbar menu, in two 
 
 Only the **empty** part of the taskbar is intercepted. Right-clicking Start still gives you Win+X, right-clicking a task button still gives you its jump list, right-clicking a tray icon still gives you its own menu. None of that is touched.
 
+## The file and desktop menu, back to Windows 10
+
+Windows 11 also redesigned the context menu you get on files and on the desktop: a nice rounded acrylic card, except your usual commands are buried under **Show more options** and the **keyboard letters are not shown at all**. That can go back too — one tick in the settings panel:
+
+| Windows 10 classic (ticked) | Windows 11 modern (default) |
+|---|---|
+| ![Classic context menu](docs/evidence/context-menu-classic-vs-win11.png) | |
+
+| | |
+|---|---|
+| Backdrop | Opaque grey, square corners vs acrylic, rounded |
+| Keyboard letters | `New (W)` / `Display settings (D)` / `Personalise (R)` vs none |
+| Third-party entries | Full-colour icon + label vs small icon row |
+
+**This menu is the system's own; nothing is drawn.** Every shell extension you have installed (7-Zip, Git, antivirus, …) is there, and it looks exactly like Windows 10 because it *is* the Windows 10 menu.
+
+**It needs an Explorer restart to take effect** — the panel has a button for it, and it asks first. That closes every open File Explorer window and blanks the desktop for a second.
+
+> How it works, in one line: Windows 11 draws this menu through a COM component, and an empty entry of the same name in the registry's **user** hive hides it, so the shell falls back to the classic menu. It is the same mechanism **Shift+right-click** uses to summon the classic menu temporarily — this just makes it stick. No injection, no hooks, and you can delete it at any time.
+
 ## Settings
 
 The **Settings…** row opens an ordinary settings window:
 
 ![Settings panel](docs/screenshot-settings-win10-en.png)
 
-Three groups: **Start-up** (start at sign-in), **Appearance** (Win11 / Win10 style) and **Language** (follow Windows / 中文 / English). Changing the appearance or the language restarts the app — see "Skins" below for why.
+Four groups: **Start-up** (start at sign-in), **Appearance** (Win11 / Win10 style), **Context menu** (Windows 10 style for files and the desktop) and **Language** (follow Windows / 中文 / English). Changing the appearance or the language restarts the app — see "Skins" below for why. The context-menu switch needs an Explorer restart, and the panel has a button for that.
 
 The bottom of the window names the settings file and offers **Open log**.
 
@@ -76,9 +96,15 @@ TaskbarExtras.exe --skin win11|win10  menu appearance for this run only
 TaskbarExtras.exe --skin-set win11|win10
                                       change the default and remember it
                                       (takes effect on the next launch)
+TaskbarExtras.exe --classic-menu      report whether the file/desktop menu is the classic one
+TaskbarExtras.exe --classic-menu on|off
+                                      turn the classic context menu on or off
+TaskbarExtras.exe --restart-explorer  restart Explorer so the above takes effect
 TaskbarExtras.exe --preview           show the menu once, for trying out a skin
 TaskbarExtras.exe --help              print this
 ```
+
+`--classic-menu` deliberately does **not** restart Explorer for you — that closes every open File Explorer window, which is your call to make, not the app's.
 
 With an instance already running, `--settings` hands the request to it rather than starting a second process.
 
@@ -145,6 +171,20 @@ The panel uses the same skin, so the two skins give two different-looking panels
 |---|---|
 | ![Settings win10](docs/screenshot-settings-win10-en.png) | ![Settings win11](docs/screenshot-settings-win11-en.png) |
 
+## The classic context menu (files and desktop)
+
+This is a switch of its own, **independent of the skins**. A skin describes how the taskbar menu *we draw* looks; this one changes the context menu the **system itself** shows for files and the desktop.
+
+Turn it on and right-clicking a file or the desktop gives you the classic Windows 10 menu: sectioned, compact, keyboard letters shown, and with **every third-party shell extension present** (7-Zip, Git, graphics drivers, antivirus…). Not an imitation — it is the real classic menu, reached by the system's other code path.
+
+**It is a separate thing from the skins, so it lives in a separate place.** A skin decides what our own taskbar menu looks like; this decides which path the system's file menu takes. Pairing the Windows 11 skin with the classic context menu is a perfectly reasonable combination, and so is the reverse.
+
+**It needs an Explorer restart to take effect.** The shell caches the menu handler it has already resolved, so the menu may not change until Explorer restarts — the settings panel has a **Restart Explorer** button, which asks first (it closes every open File Explorer window).
+
+**How it works** (no injection, no hooks): Windows 11 paints this menu through a COM component, and an empty entry of the same name under the user hive (`HKCU`) hides it, so the shell finds no server and falls back to the classic menu. That is the very mechanism **Shift+right-click** uses to summon the classic menu temporarily — this app just makes it persistent.
+
+The trade-off in one line: the Windows 11 menu is **pixels on the shell's composition surface, not a Win32 menu object**. There is no `HMENU` to obtain, so "summon it and restyle it" is not a thing that exists — the only move available is to make the system take the classic path.
+
 ## Two rules
 
 **Nothing gets injected.** No DLL into `explorer.exe`, no patching, no touching system files. It's an ordinary process. Close it and nothing is left behind.
@@ -166,6 +206,7 @@ The reason is practical: tools built on injection have to be rewritten every tim
 - Only tested on a single 150%-scaled display. Dual monitors and mixed DPI are unverified.
 - About 40 ms between the right-click and the menu appearing — swallowing the click and then rendering can't be made free.
 - Changing the skin or the UI language restarts the process (see Skins above for why).
+- Switching to the classic context menu needs an Explorer restart. Verified working on 26H2 (Build 26300.9457); earlier and later builds are untested.
 - No compatibility handling for other taskbar tools; running them side by side may fight.
 - Telling "empty taskbar" apart from "an app button" needs UI Automation, because Windows 11 draws the task buttons with XAML and their positions exist nowhere in the window tree. The snapshot is rebuilt once a second. If UIA ever comes up empty it falls back to the old window-tree test, which can misjudge on Windows 11.
 - The letter shortcuts need the menu to hold keyboard focus. That works in practice; if it ever does not (the log says so), the letters go quiet while clicking still works.

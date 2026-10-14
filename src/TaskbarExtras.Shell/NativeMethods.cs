@@ -286,4 +286,13 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+
+    // ---------------------------------------------------------------- Shell change notification
+
+    /// <summary>
+    /// "Class registrations moved, drop your cached view." Used after toggling the context-menu
+    /// CLSID so Explorer re-resolves it. See <see cref="ClassicContextMenu.NotifyShell"/>.
+    /// </summary>
+    [DllImport("shell32.dll")]
+    internal static extern void SHChangeNotify(int wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
 }

@@ -74,6 +74,20 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // Also registry-only, also must work while another copy runs.
+        if (TryHandleClassicMenuArgument(e.Args))
+        {
+            Shutdown();
+            return;
+        }
+
+        // Killing Explorer is destructive; keep it behind its own explicit flag.
+        if (TryHandleRestartExplorerArgument(e.Args))
+        {
+            Shutdown();
+            return;
+        }
+
         // `--settings` on an already-running copy is a request, not a second copy: hand it over
         // and go away. With nothing running there is nothing to hand it to, so it falls through
         // and the panel opens at the end of a normal start-up.
@@ -294,6 +308,10 @@ public partial class App : System.Windows.Application
         Console.WriteLine("  TaskbarExtras.exe --skin-set win11|win10");
         Console.WriteLine("                                     改默认外观并记住（下次启动生效）");
         Console.WriteLine("  TaskbarExtras.exe --preview        只显示一次菜单，用来预览皮肤");
+        Console.WriteLine("  TaskbarExtras.exe --classic-menu   查看文件/桌面右键菜单是否已回经典");
+        Console.WriteLine("  TaskbarExtras.exe --classic-menu on|off");
+        Console.WriteLine("                                     文件/桌面使用 Windows 10 / 11 风格");
+        Console.WriteLine("  TaskbarExtras.exe --restart-explorer  重启资源管理器（让上面的开关生效）");
         Console.WriteLine("  TaskbarExtras.exe --help           显示这段说明");
         Console.WriteLine();
         Console.WriteLine($"默认外观是 {AppSettings.DefaultSkin}（没设置过时用这个）。");
@@ -338,6 +356,85 @@ public partial class App : System.Windows.Application
         Console.WriteLine(AppSettings.Save()
             ? $"默认外观已设为 {value}。重启 TaskbarExtras 后生效。"
             : "写入设置文件失败，未能保存。");
+        return true;
+    }
+
+    /// <summary>
+    /// Handles <c>--classic-menu</c> (report) and <c>--classic-menu on|off</c> (change).
+    ///
+    /// <para>
+    /// The scriptable form of the settings panel's switch, and like <c>--skin-set</c> it works
+    /// without the UI so it can be scripted. It reports whether Explorer still has to be restarted
+    /// rather than restarting it — killing someone's Explorer windows as a side effect of a
+    /// command-line flag would be a nasty surprise.
+    /// </para>
+    /// </summary>
+    /// <returns>True when the argument was present and has been handled.</returns>
+    private static bool TryHandleClassicMenuArgument(string[] args)
+    {
+        var index = Array.FindIndex(args, a => a is "--classic-menu" or "--classic-context-menu");
+        if (index < 0) return false;
+
+        var value = index + 1 < args.Length ? args[index + 1].Trim().ToLowerInvariant() : null;
+        ParentConsole.TryAttach();
+
+        switch (value)
+        {
+            case "on" or "enable" or "true":
+                if (!ClassicContextMenu.TryEnable(out var enableError))
+                {
+                    Console.WriteLine($"开启失败：{enableError}");
+                    break;
+                }
+
+                ClassicContextMenu.NotifyShell();
+                Console.WriteLine("已启用 Windows 10 风格的文件/桌面右键菜单。");
+                Console.WriteLine("若菜单没有立刻变化，重启资源管理器（或运行 TaskbarExtras.exe --restart-explorer）。");
+                break;
+
+            case "off" or "disable" or "false":
+                if (!ClassicContextMenu.TryDisable(out var disableError))
+                {
+                    Console.WriteLine($"关闭失败：{disableError}");
+                    break;
+                }
+
+                ClassicContextMenu.NotifyShell();
+                Console.WriteLine("已恢复 Windows 11 默认的文件/桌面右键菜单。");
+                Console.WriteLine("若菜单没有立刻变化，重启资源管理器（或运行 TaskbarExtras.exe --restart-explorer）。");
+                break;
+
+            default:
+                Console.WriteLine(ClassicContextMenu.IsEnabled
+                    ? "文件/桌面右键菜单：Windows 10 风格（经典）"
+                    : "文件/桌面右键菜单：Windows 11 风格（默认）");
+                Console.WriteLine();
+                Console.WriteLine("用法：TaskbarExtras.exe --classic-menu on|off");
+                break;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Handles <c>--restart-explorer</c>: the blunt way to make the context-menu switch take.
+    /// Separated from the switch itself so the destructive step is always an explicit choice.
+    /// </summary>
+    /// <returns>True when the argument was present and has been handled.</returns>
+    private static bool TryHandleRestartExplorerArgument(string[] args)
+    {
+        if (!args.Any(a => a == "--restart-explorer")) return false;
+
+        ParentConsole.TryAttach();
+        if (ClassicContextMenu.TryRestartExplorer(out var error))
+        {
+            Console.WriteLine("已重启资源管理器。");
+        }
+        else
+        {
+            Console.WriteLine($"重启资源管理器失败：{error}");
+        }
+
         return true;
     }
 

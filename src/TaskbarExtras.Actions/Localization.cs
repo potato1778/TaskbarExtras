@@ -64,6 +64,23 @@ public static class Localization
         ["settings.open-log"]         = ("Open log",               "打开日志"),
         ["settings.close"]            = ("Close",                  "关闭"),
 
+        // The file / desktop context menu switch. Deliberately worded to say what it does to the
+        // system rather than to promise an appearance — see docs/DESIGN.md §6.7.
+        ["settings.classicmenu.group"] = ("Context menu",           "右键菜单"),
+        ["settings.classicmenu"]      = ("Windows 10 style for files and the desktop",
+                                         "文件和桌面使用 Windows 10 风格"),
+        ["settings.classicmenu.hint"] = ("Applies to files, folders and the desktop. This is the system's own Windows 10 menu, brought back — every installed shell extension is in it. Needs Explorer to restart.",
+                                         "作用于文件、文件夹和桌面。这是系统自带的 Windows 10 菜单，不是仿画的 —— 已装的 shell 扩展都在里面。需要重启资源管理器生效。"),
+        ["settings.classicmenu.failed"] = ("Could not change the context menu setting:",
+                                           "无法修改右键菜单设置："),
+        ["settings.restart-explorer"] = ("Restart Explorer now",   "立即重启资源管理器"),
+        ["settings.restart-explorer.hint"] = ("Closes all File Explorer windows. The desktop and taskbar blink for a moment.",
+                                              "会关闭所有已打开的文件资源管理器窗口，桌面和任务栏会闪一下。"),
+        ["settings.restart-explorer.confirm"] = ("Restart Explorer?\n\nEvery open File Explorer window will close.",
+                                                 "确定重启资源管理器？\n\n所有已打开的文件资源管理器窗口都会被关闭。"),
+        ["settings.restart-explorer.failed"] = ("Could not restart Explorer:",
+                                                "重启资源管理器失败："),
+
         // The skin names are product names and stay untranslated.
         ["menu.skin.win11"]           = ("Windows 11 style",       "Windows 11 风格"),
         ["menu.skin.win10"]           = ("Windows 10 style",       "Windows 10 风格"),

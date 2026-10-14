@@ -61,6 +61,12 @@ public partial class SettingsWindow : Window
         Win10Radio.Content = Localization.Get("menu.skin.win10");
         Win11Radio.Content = Localization.Get("menu.skin.win11");
 
+        ClassicMenuHeader.Text = Localization.Get("settings.classicmenu.group");
+        ClassicMenuCheck.Content = Localization.Get("settings.classicmenu");
+        ClassicMenuHint.Text = Localization.Get("settings.classicmenu.hint");
+        RestartExplorerButton.Content = Localization.Get("settings.restart-explorer");
+        RestartExplorerHint.Text = Localization.Get("settings.restart-explorer.hint");
+
         LanguageHeader.Text = Localization.Get("settings.language.group");
         LanguageSystemRadio.Content = Localization.Get("settings.language.system");
         LanguageZhRadio.Content = Localization.Get("settings.language.zh");
@@ -84,6 +90,8 @@ public partial class SettingsWindow : Window
 
         Win11Radio.IsChecked = AppSettings.Skin == "win11";
         Win10Radio.IsChecked = AppSettings.Skin == "win10";
+
+        ClassicMenuCheck.IsChecked = ClassicContextMenu.IsEnabled;
 
         var language = AppSettings.Language?.Trim().ToLowerInvariant();
         LanguageSystemRadio.IsChecked = string.IsNullOrEmpty(language);
@@ -126,6 +134,86 @@ public partial class SettingsWindow : Window
         _loading = true;
         StartupCheck.IsChecked = StartupRegistration.IsEnabled;
         _loading = false;
+    }
+
+    /// <summary>
+    /// Flips the file / desktop context menu between the modern and classic shells.
+    ///
+    /// <para>
+    /// Applied immediately rather than at restart, unlike the skin: this setting lives entirely in
+    /// the registry, so the running process holds no copy of it. What the shell does with it is
+    /// Explorer's problem, and Explorer is told to re-read via
+    /// <see cref="ClassicContextMenu.NotifyShell"/> — with a manual restart button offered next to
+    /// the switch, because that notification does not always take.
+    /// </para>
+    ///
+    /// <para>
+    /// On failure the tick is put back to match the registry, same as the start-up checkbox. A
+    /// switch that silently springs back teaches the user nothing.
+    /// </para>
+    /// </summary>
+    private void OnClassicMenuChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+
+        var turningOn = ClassicMenuCheck.IsChecked == true;
+
+        var ok = turningOn
+            ? ClassicContextMenu.TryEnable(out var error)
+            : ClassicContextMenu.TryDisable(out error);
+
+        Log.Write(turningOn
+            ? ok ? "已开启经典右键菜单（文件/桌面）" : $"开启经典右键菜单失败：{error}"
+            : ok ? "已关闭经典右键菜单（恢复 Win11）" : $"关闭经典右键菜单失败：{error}");
+
+        if (ok)
+        {
+            ClassicContextMenu.NotifyShell();
+            return;
+        }
+
+        System.Windows.MessageBox.Show(this,
+            $"{Localization.Get("settings.classicmenu.failed")}\n\n{error}",
+            Localization.Get("app.name"),
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
+
+        _loading = true;
+        ClassicMenuCheck.IsChecked = ClassicContextMenu.IsEnabled;
+        _loading = false;
+    }
+
+    /// <summary>
+    /// Restarts Explorer, after asking.
+    ///
+    /// <para>
+    /// Confirmed rather than done silently: this closes every open File Explorer window and blanks
+    /// the desktop for a second, which is not something to inflict on someone who only wanted to
+    /// tick a box.
+    /// </para>
+    /// </summary>
+    private void OnRestartExplorer(object sender, RoutedEventArgs e)
+    {
+        var answer = System.Windows.MessageBox.Show(this,
+            Localization.Get("settings.restart-explorer.confirm"),
+            Localization.Get("app.name"),
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Question);
+
+        if (answer != MessageBoxResult.OK) return;
+
+        if (ClassicContextMenu.TryRestartExplorer(out var error))
+        {
+            Log.Write("已重启资源管理器");
+            return;
+        }
+
+        Log.Write($"重启资源管理器失败：{error}");
+        System.Windows.MessageBox.Show(this,
+            $"{Localization.Get("settings.restart-explorer.failed")}\n\n{error}",
+            Localization.Get("app.name"),
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
     }
 
     private void OnSkinChanged(object sender, RoutedEventArgs e)
